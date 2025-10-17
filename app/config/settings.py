@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     erp_login_page: str = Field(default="/login", description="ERP登录页面路径")
 
     # 浏览器配置
-    browser_headless: bool = Field(default=True, description="无头浏览器模式")
+    browser_headless: bool = Field(default=False, description="无头浏览器模式")
     browser_timeout: int = Field(default=30000, description="浏览器超时时间(毫秒)")
     browser_download_path: str = Field(default="./downloads", description="浏览器下载路径")
 

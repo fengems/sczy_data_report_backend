@@ -40,7 +40,8 @@ class BaseCrawler(ABC):
             playwright = await async_playwright().start()
             self.browser = await playwright.chromium.launch(
                 headless=settings.browser_headless,
-                args=["--disable-blink-features=AutomationControlled"]
+                args=["--disable-blink-features=AutomationControlled"],
+                channel="chrome"  # 使用Chrome浏览器
             )
 
             # Create browser context
@@ -52,8 +53,8 @@ class BaseCrawler(ABC):
             # Create page
             self.page = await self.context.new_page()
 
-            # Apply stealth.js to hide automation features
-            await stealth_async(self.page)
+            # 临时禁用stealth功能，测试是否影响了JavaScript渲染
+            # await stealth_async(self.page)
 
             # Set download path
             await self.page.context.set_extra_http_headers({
@@ -156,18 +157,29 @@ class BaseCrawler(ABC):
         return str(screenshot_path)
 
     async def check_login_status(self) -> bool:
-        """Check login status"""
-        # TODO: Implement login status check based on specific ERP system
-        # This is just an example implementation
+        """检查登录状态"""
         if not self.page:
             return False
 
         try:
-            # Check for specific elements that appear after login
-            # For example: username, logout button, etc.
-            logout_element = await self.page.query_selector("[data-testid='logout']")
-            return logout_element is not None
-        except:
+            # 检查当前URL是否为目标URL
+            current_url = self.page.url
+            target_url = "https://scm.sdongpo.com/cc_sssp/superAdmin/viewCenter/v1/index"
+
+            if current_url == target_url:
+                self.logger.info(f"Login status confirmed: at target URL {current_url}")
+                return True
+
+            # 检查URL是否包含目标路径的特征
+            if "/v1/index" in current_url and "viewCenter" in current_url:
+                self.logger.info(f"Login status confirmed: URL contains target patterns {current_url}")
+                return True
+
+            self.logger.info(f"Not logged in yet: current URL {current_url}")
+            return False
+
+        except Exception as e:
+            self.logger.error(f"Error checking login status: {str(e)}")
             return False
 
     @abstractmethod
