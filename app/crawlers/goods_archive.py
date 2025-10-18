@@ -40,67 +40,47 @@ class GoodsArchiveCrawler(BaseCrawler):
         try:
             self.logger.info("开始定位filter部分...")
 
-            # 等待页面加载完成
-            await self.page.wait_for_load_state("networkidle")
-            await asyncio.sleep(2)  # 额外等待确保JS渲染完成
+            # 等待页面基本加载完成，不需要networkidle
+            await self.page.wait_for_load_state("domcontentloaded")
+            await asyncio.sleep(0.5)  # 短暂等待确保JS渲染完成
 
             # 尝试多个可能的filter选择器
             filter_selectors = [
+                ".filter__operation__btn-wrap",  # 最可能的选择器放前面
                 ".filter__button-wrap",
-                ".filter__operation__btn-wrap",
                 ".filter-button-wrap",
                 ".filter-operation-btn-wrap",
                 "[class*='filter'][class*='button']",
                 "[class*='filter'][class*='operation']"
             ]
 
+            # 直接并行查找所有可能的filter元素
             filter_element = None
             found_selector = None
 
             for selector in filter_selectors:
                 try:
-                    element = await self.page.wait_for_selector(selector, timeout=5000)
-                    if element:
-                        # 检查元素是否可见
-                        is_visible = await element.is_visible()
-                        if is_visible:
-                            filter_element = element
-                            found_selector = selector
-                            self.logger.info(f"找到filter部分，选择器: {selector}")
-                            break
+                    element = await self.page.wait_for_selector(selector, timeout=2000)
+                    if element and await element.is_visible():
+                        filter_element = element
+                        found_selector = selector
+                        self.logger.info(f"找到filter部分，选择器: {selector}")
+                        break
                 except:
                     continue
 
+            # 如果快速查找失败，尝试备用方案
             if not filter_element:
-                self.logger.warning("未找到filter部分，尝试通过按钮文本定位...")
-                # 备用方案：通过包含"导出"文本的按钮来定位filter区域
-                export_buttons = await self.page.query_selector_all("button")
-                for button in export_buttons:
-                    try:
-                        text = await button.text_content()
-                        if text and "导出" in text.strip():
-                            # 查找按钮的父级容器，可能是filter区域
-                            parent = await button.evaluate("""(element) => {
-                                let parent = element.parentElement;
-                                while (parent && parent !== document.body) {
-                                    if (parent.className && (
-                                        parent.className.includes('filter') ||
-                                        parent.className.includes('operation') ||
-                                        parent.className.includes('button-wrap')
-                                    )) {
-                                        return parent;
-                                    }
-                                    parent = parent.parentElement;
-                                }
-                                return null;
-                            }""")
-                            if parent:
-                                filter_element = button
-                                found_selector = "parent_of_export_button"
-                                self.logger.info("通过导出按钮定位到filter区域")
-                                break
-                    except:
-                        continue
+                self.logger.info("快速查找失败，尝试备用方案...")
+                # 直接查找导出按钮，减少遍历所有按钮的开销
+                try:
+                    export_button = await self.page.wait_for_selector("button:has-text('导出')", timeout=3000)
+                    if export_button and await export_button.is_visible():
+                        filter_element = export_button
+                        found_selector = "export_button_direct"
+                        self.logger.info("直接找到导出按钮，作为filter区域")
+                except:
+                    pass
 
             if not filter_element:
                 raise RuntimeError("无法找到filter部分")
@@ -189,105 +169,47 @@ class GoodsArchiveCrawler(BaseCrawler):
             await export_button.hover()
             self.logger.info("已hover到导出按钮")
 
-            # 给dropdown更多时间出现和渲染
-            await asyncio.sleep(2)  # 增加等待时间
+            # 短暂等待dropdown出现，不需要太长时间
+            await asyncio.sleep(0.8)
 
-            # 等待页面稳定
-            await self.page.wait_for_load_state("networkidle")
+            # 优先直接查找目标元素，而不是先找dropdown容器
+            try:
+                target_element = await self.page.wait_for_selector(
+                    "text='基础信息导出'",
+                    timeout=3000
+                )
+                if target_element and await target_element.is_visible():
+                    self.logger.info("直接找到目标元素，无需查找dropdown容器")
+                    return target_element  # 直接返回目标元素
+            except:
+                pass
 
-            # 查找dropdown元素 - 增加更多选择器和更长的等待时间
+            # 如果直接查找失败，再尝试查找dropdown容器
             dropdown_selectors = [
+                ".ivu-dropdown",  # 最可能的dropdown选择器
                 ".ivu-select-dropdown",
-                ".ivu-dropdown",
                 ".ivu-dropdown-menu",
-                ".ivu-select-dropdown-list",
                 "[class*='dropdown']",
                 "[class*='select-dropdown']",
-                "[class*='dropdown-menu']",
-                "[class*='dropdown-list']",
-                "ul[class*='dropdown']",  # 可能是ul列表
-                "div[class*='dropdown']:visible",
-                ".ivu-dropdown-drop"  # iView特有的dropdown容器
+                ".ivu-dropdown-drop"
             ]
 
             dropdown_element = None
 
             for selector in dropdown_selectors:
                 try:
-                    # 使用更长的等待时间
-                    element = await self.page.wait_for_selector(selector, timeout=10000)
-                    if element:
-                        is_visible = await element.is_visible()
-                        if is_visible:
-                            dropdown_element = element
-                            self.logger.info(f"找到dropdown元素，选择器: {selector}")
-                            break
+                    element = await self.page.wait_for_selector(selector, timeout=2000)
+                    if element and await element.is_visible():
+                        dropdown_element = element
+                        self.logger.info(f"找到dropdown元素，选择器: {selector}")
+                        break
                 except:
                     continue
 
             if not dropdown_element:
-                # 备用方案：查找所有可能的新出现的下拉菜单
-                self.logger.info("使用备用方案查找dropdown...")
-                all_dropdowns = await self.page.query_selector_all(
-                    ".ivu-select-dropdown, .ivu-dropdown, .ivu-dropdown-menu, .ivu-select-dropdown-list, [class*='dropdown'], [class*='dropdown-menu'], ul[class*='dropdown']"
-                )
-                self.logger.info(f"找到 {len(all_dropdowns)} 个潜在dropdown元素")
-
-                for i, dropdown in enumerate(all_dropdowns):
-                    try:
-                        is_visible = await dropdown.is_visible()
-                        if is_visible:
-                            # 检查dropdown的位置，确保它在导出按钮附近
-                            button_box = await export_button.bounding_box()
-                            dropdown_box = await dropdown.bounding_box()
-
-                            if button_box and dropdown_box:
-                                # 检查dropdown是否在按钮下方附近
-                                if abs(dropdown_box['x'] - button_box['x']) < 200 and dropdown_box['y'] > button_box['y']:
-                                    dropdown_element = dropdown
-                                    self.logger.info(f"通过位置检查找到dropdown元素，位置: {dropdown_box}")
-                                    break
-                            else:
-                                # 如果无法获取位置，使用第一个可见的
-                                dropdown_element = dropdown
-                                self.logger.info("使用第一个可见的dropdown元素")
-                                break
-                    except:
-                        continue
-
-            if not dropdown_element:
-                # 最后的备用方案：直接查找所有包含"基础信息导出"文本的元素
-                self.logger.info("使用最终备用方案：直接查找包含'基础信息导出'的元素...")
-                try:
-                    target_element = await self.page.wait_for_selector(
-                        "text='基础信息导出'",
-                        timeout=5000
-                    )
-                    if target_element:
-                        # 找到目标元素的父级dropdown容器
-                        dropdown_parent = await target_element.evaluate("""(element) => {
-                            let parent = element.parentElement;
-                            while (parent && parent !== document.body) {
-                                if (parent.className && (
-                                    parent.className.includes('dropdown') ||
-                                    parent.className.includes('select') ||
-                                    parent.className.includes('menu') ||
-                                    parent.tagName === 'UL'
-                                )) {
-                                    return parent;
-                                }
-                                parent = parent.parentElement;
-                            }
-                            return null;
-                        }""")
-                        if dropdown_parent:
-                            dropdown_element = dropdown_parent
-                            self.logger.info("通过目标元素反向定位到dropdown容器")
-                except:
-                    pass
-
-            if not dropdown_element:
-                raise RuntimeError("无法找到dropdown元素")
+                # 简化的备用方案：直接返回按钮，让下一步处理
+                self.logger.info("未找到dropdown容器，将在下一步中直接查找目标元素")
+                return export_button
 
             return dropdown_element
 
@@ -305,155 +227,53 @@ class GoodsArchiveCrawler(BaseCrawler):
         try:
             self.logger.info("开始定位dropdown-item...")
 
-            # 直接查找包含目标文本的元素作为主要方案
+            # 如果上一步已经直接返回了目标元素，直接使用
+            if dropdown_element and hasattr(dropdown_element, 'text_content'):
+                try:
+                    text = await dropdown_element.text_content()
+                    if text and "基础信息导出" in text.strip():
+                        self.logger.info("使用上一步找到的目标元素")
+                        return dropdown_element
+                except:
+                    pass
+
+            # 优先方案：直接文本查找，最快最准
             try:
                 target_element = await self.page.wait_for_selector(
                     "text='基础信息导出'",
-                    timeout=10000
+                    timeout=3000
                 )
-                if target_element:
-                    # 验证元素是否可见和可点击
-                    is_visible = await target_element.is_visible()
-                    if is_visible:
-                        self.logger.info("直接找到'基础信息导出'元素")
-                        return target_element
+                if target_element and await target_element.is_visible():
+                    self.logger.info("直接找到'基础信息导出'元素")
+                    return target_element
             except:
-                self.logger.info("直接查找失败，尝试在dropdown区域内查找...")
+                self.logger.info("直接查找失败，尝试备用方案...")
 
-            # 如果dropdown_element存在且可查找，在其中搜索
+            # 简化的备用方案：只在dropdown_element内查找，避免全局搜索
             if dropdown_element and hasattr(dropdown_element, 'query_selector'):
-                # 在dropdown中查找目标项
-                item_selectors = [
-                    "li.ivu-dropdown-item:has-text('基础信息导出')",
-                    ".ivu-dropdown-item:has-text('基础信息导出')",
-                    "li:has-text('基础信息导出')",
-                    "[class*='dropdown-item']:has-text('基础信息导出')",
-                    "*:has-text('基础信息导出')"  # 通用选择器
-                ]
+                try:
+                    item = await dropdown_element.query_selector("li:has-text('基础信息导出')")
+                    if item and await item.is_visible():
+                        self.logger.info("在dropdown容器内找到目标元素")
+                        return item
+                except:
+                    pass
 
-                dropdown_item = None
-
-                for selector in item_selectors:
-                    try:
-                        item = await dropdown_element.query_selector(selector)
-                        if item:
-                            # 验证文本内容
-                            text = await item.text_content()
-                            if text and "基础信息导出" in text.strip():
-                                is_visible = await item.is_visible()
-                                if is_visible:
-                                    dropdown_item = item
-                                    self.logger.info(f"在dropdown中找到目标项，选择器: {selector}")
-                                    break
-                    except:
-                        continue
-
-                if dropdown_item:
-                    return dropdown_item
-
-            # 备用方案：全局查找所有可能的dropdown-item
-            self.logger.info("使用备用方案：全局查找dropdown-item...")
-            all_selectors = [
-                "li.ivu-dropdown-item",
-                ".ivu-dropdown-item",
-                "[class*='dropdown-item']",
-                "li",
-                "div[class*='item']",
-                "*[role='menuitem']"  # 可能的菜单项角色
+            # 最终备用方案：快速全局查找，限制选择器数量
+            quick_selectors = [
+                "li:has-text('基础信息导出')",
+                ".ivu-dropdown-item:has-text('基础信息导出')",
+                "[class*='dropdown-item']:has-text('基础信息导出')"
             ]
 
-            for selector in all_selectors:
+            for selector in quick_selectors:
                 try:
-                    all_items = await self.page.query_selector_all(selector)
-                    self.logger.info(f"使用选择器 {selector} 找到 {len(all_items)} 个元素")
-
-                    for item in all_items:
-                        try:
-                            text = await item.text_content()
-                            if text and "基础信息导出" in text.strip():
-                                is_visible = await item.is_visible()
-                                if is_visible:
-                                    # 检查是否可点击
-                                    is_enabled = await item.is_enabled()
-                                    if is_enabled:
-                                        dropdown_item = item
-                                        self.logger.info(f"通过选择器 {selector} 找到目标元素: '{text.strip()}'")
-                                        return dropdown_item
-                        except:
-                            continue
+                    element = await self.page.wait_for_selector(selector, timeout=2000)
+                    if element and await element.is_visible():
+                        self.logger.info(f"通过选择器 {selector} 找到目标元素")
+                        return element
                 except:
                     continue
-
-            # 最终备用方案：使用JavaScript进行更精确的搜索
-            self.logger.info("使用JavaScript进行最终搜索...")
-            try:
-                js_result = await self.page.evaluate("""
-                    () => {
-                        // 查找所有包含目标文本的元素
-                        const targetText = '基础信息导出';
-                        const allElements = document.getElementsByTagName('*');
-                        const candidates = [];
-
-                        for (let element of allElements) {
-                            if (element.textContent && element.textContent.includes(targetText)) {
-                                // 检查是否是可见的可点击元素
-                                const style = window.getComputedStyle(element);
-                                const rect = element.getBoundingClientRect();
-
-                                if (style.display !== 'none' &&
-                                    style.visibility !== 'hidden' &&
-                                    rect.width > 0 && rect.height > 0) {
-
-                                    // 检查是否是菜单项或链接类型
-                                    const tagName = element.tagName.toLowerCase();
-                                    const className = element.className || '';
-
-                                    if (tagName === 'li' || tagName === 'a' || tagName === 'button' ||
-                                        className.includes('item') || className.includes('dropdown') ||
-                                        element.onclick || element.getAttribute('onclick')) {
-
-                                        // 安全地获取元素索引
-                                        let index = -1;
-                                        if (element.parentElement && element.parentElement.children) {
-                                            index = Array.from(element.parentElement.children).indexOf(element);
-                                        }
-
-                                        candidates.push({
-                                            element: element,
-                                            text: element.textContent.trim(),
-                                            tagName: tagName,
-                                            className: className,
-                                            index: index
-                                        });
-                                    }
-                                }
-                            }
-                        }
-
-                        // 返回最佳候选者的信息
-                        if (candidates.length > 0) {
-                            const best = candidates[0];
-                            return {
-                                found: true,
-                                text: best.text,
-                                tagName: best.tagName,
-                                className: best.className,
-                                index: best.index
-                            };
-                        }
-
-                        return { found: false };
-                    }
-                """)
-
-                if js_result and js_result.get('found'):
-                    self.logger.info(f"JavaScript找到目标元素: {js_result}")
-                    # 直接使用最简单的文本定位
-                    element = await self.page.wait_for_selector("text='基础信息导出'", timeout=5000)
-                    if element:
-                        return element
-            except Exception as e:
-                self.logger.error(f"JavaScript搜索失败: {str(e)}")
 
             raise RuntimeError("无法找到'基础信息导出'dropdown-item")
 
@@ -471,13 +291,10 @@ class GoodsArchiveCrawler(BaseCrawler):
         try:
             self.logger.info("开始处理导出modal弹窗...")
 
-            # 先等待一段时间，让页面响应
-            await asyncio.sleep(3)
+            # 短暂等待modal出现
+            await asyncio.sleep(1)
 
-            # 尝试等待页面加载完成
-            await self.page.wait_for_load_state("networkidle")
-
-            # 方案1: 查找modal弹窗并处理
+            # 方案1: 快速查找modal弹窗并处理
             modal_element = await self._try_find_modal()
             if modal_element:
                 return await self._handle_modal_confirmation(modal_element)
@@ -525,60 +342,39 @@ class GoodsArchiveCrawler(BaseCrawler):
 
     async def _handle_modal_confirmation(self, modal_element: Any) -> bool:
         """处理modal弹窗的确认操作"""
-        # 在modal中查找确认导出按钮 - 使用更多选择器
+        # 优先查找最可能的确认按钮
         confirm_selectors = [
-            "button:has-text('确认导出')",
+            "button:has-text('确认导出')",  # 最具体的选择器
             "button:has-text('确认')",
-            "button:has-text('导出')",
             ".ivu-btn-primary:has-text('确认')",
-            ".ivu-btn-text:has-text('确认')",
-            ".confirm-btn",
-            ".btn-primary",
-            ".btn-confirm",
-            "[class*='confirm']",
-            "[class*='primary']",
-            "button[type='submit']",
-            ".el-button--primary",
-            ".el-button--default"
+            ".btn-primary:has-text('确认')"
         ]
 
         confirm_button = None
 
-        # 首先在modal内查找
-        if hasattr(modal_element, 'query_selector_all'):
-            modal_buttons = await modal_element.query_selector_all("button")
-            self.logger.info(f"在modal中找到 {len(modal_buttons)} 个按钮")
-
-            for i, button in enumerate(modal_buttons):
+        # 快速查找确认按钮，优先在modal内查找
+        if hasattr(modal_element, 'query_selector'):
+            for selector in confirm_selectors:
                 try:
-                    text = await button.text_content()
-                    self.logger.debug(f"Modal按钮 {i+1}: '{text}'")
-
-                    if text and ("确认" in text or "导出" in text):
-                        is_visible = await button.is_visible()
-                        if is_visible:
-                            confirm_button = button
-                            self.logger.info(f"找到确认按钮，文本: '{text}'")
-                            break
+                    button = await modal_element.query_selector(selector)
+                    if button and await button.is_visible():
+                        confirm_button = button
+                        text = await button.text_content()
+                        self.logger.info(f"在modal内找到确认按钮: '{text}'")
+                        break
                 except:
                     continue
 
-        # 如果modal内没找到，全局查找确认按钮
+        # 如果modal内没找到，快速全局查找
         if not confirm_button:
-            self.logger.info("在modal内未找到确认按钮，尝试全局查找...")
             for selector in confirm_selectors:
                 try:
-                    button = await self.page.wait_for_selector(selector, timeout=3000)
-                    if button:
+                    button = await self.page.wait_for_selector(selector, timeout=2000)
+                    if button and await button.is_visible():
+                        confirm_button = button
                         text = await button.text_content()
-                        self.logger.debug(f"全局查找按钮 '{selector}': '{text}'")
-
-                        if text and ("确认" in text or "导出" in text):
-                            is_visible = await button.is_visible()
-                            if is_visible:
-                                confirm_button = button
-                                self.logger.info(f"全局找到确认按钮，选择器: {selector}, 文本: '{text}'")
-                                break
+                        self.logger.info(f"全局找到确认按钮: '{text}'")
+                        break
                 except:
                     continue
 
@@ -594,8 +390,8 @@ class GoodsArchiveCrawler(BaseCrawler):
         """处理直接下载情况（无modal弹窗）"""
         self.logger.info("检查是否直接开始下载...")
 
-        # 等待一段时间，看是否有下载开始
-        await asyncio.sleep(3)
+        # 短暂等待，看是否有下载开始
+        await asyncio.sleep(1)
 
         # 检查页面状态，看是否有任何下载相关的提示
         try:
