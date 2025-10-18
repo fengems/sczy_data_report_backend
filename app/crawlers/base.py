@@ -4,11 +4,10 @@ Base crawler class
 import asyncio
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Optional, Union
 from contextlib import asynccontextmanager
 
 from playwright.async_api import Page, Browser, BrowserContext, async_playwright
-from playwright_stealth import stealth_async
 
 from app.config.settings import settings
 from app.utils.logger import get_logger
@@ -34,27 +33,31 @@ class BaseCrawler(ABC):
         finally:
             await self._cleanup_browser()
 
-    async def _init_browser(self) -> None:
-        """Initialize browser"""
+    async def _init_browser(self, context_options: Dict[str, Any] = None) -> None:
+        """Initialize browser
+
+        Args:
+            context_options: Optional context configuration. If None, uses default settings.
+                           Example: {"viewport": {"width": 1920, "height": 1080}, "user_agent": "..."}
+        """
         if not self.browser:
             playwright = await async_playwright().start()
             self.browser = await playwright.chromium.launch(
                 headless=settings.browser_headless,
-                args=["--disable-blink-features=AutomationControlled"],
+                args=[],  # 使用默认参数，不添加任何特殊配置
                 channel="chrome"  # 使用Chrome浏览器
             )
 
-            # Create browser context
-            self.context = await self.browser.new_context(
-                viewport={"width": 1920, "height": 1080},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            )
+            # Create browser context - use default settings unless specific options provided
+            if context_options:
+                self.context = await self.browser.new_context(**context_options)
+                self.logger.info(f"Browser context created with custom options: {context_options}")
+            else:
+                self.context = await self.browser.new_context()  # Use all defaults
+                self.logger.info("Browser context created with default settings")
 
             # Create page
             self.page = await self.context.new_page()
-
-            # 临时禁用stealth功能，测试是否影响了JavaScript渲染
-            # await stealth_async(self.page)
 
             # Set download path
             await self.page.context.set_extra_http_headers({
@@ -62,6 +65,102 @@ class BaseCrawler(ABC):
             })
 
             self.logger.info("Browser initialized successfully")
+
+            # 如果不是headless模式，添加一些调试便利功能
+            if not settings.browser_headless:
+                await self._setup_debug_features()
+
+    async def use_existing_context(self, browser_context: BrowserContext) -> None:
+        """Use an existing browser context instead of creating a new one
+
+        Args:
+            browser_context: An existing browser context to reuse
+        """
+        self.context = browser_context
+        self.browser = browser_context.browser
+        self.page = await self.context.new_page()
+
+        self.logger.info("Using existing browser context")
+
+        # 如果不是headless模式，添加调试功能
+        if not settings.browser_headless:
+            await self._setup_debug_features()
+
+    async def _setup_debug_features(self) -> None:
+        """设置调试模式下的便利功能"""
+        try:
+            # 添加一些JavaScript代码，方便调试
+            await self.page.add_init_script("""
+                // 添加全局调试函数
+                window.debugScroll = function(x = 0, y = 0) {
+                    window.scrollTo(x, y);
+                    console.log(`Scrolled to (${x}, ${y})`);
+                };
+
+                // 添加页面信息显示
+                window.debugInfo = function() {
+                    console.log('Page Info:', {
+                        url: window.location.href,
+                        title: document.title,
+                        viewport: {
+                            width: window.innerWidth,
+                            height: window.innerHeight
+                        },
+                        scroll: {
+                            x: window.scrollX,
+                            y: window.scrollY
+                        }
+                    });
+                };
+
+                // 添加高亮元素功能
+                window.debugHighlight = function(selector) {
+                    const element = document.querySelector(selector);
+                    if (element) {
+                        element.style.border = '3px solid red';
+                        element.style.backgroundColor = 'yellow';
+                        console.log(`Highlighted: ${selector}`);
+                        return element;
+                    }
+                    console.log(`Element not found: ${selector}`);
+                    return null;
+                };
+
+                console.log('Debug functions loaded. Use debugScroll(), debugInfo(), debugHighlight()');
+            """)
+
+            self.logger.info("Debug features enabled")
+        except Exception as e:
+            self.logger.warning(f"Failed to setup debug features: {str(e)}")
+
+    async def resize_window(self, width: int, height: int) -> None:
+        """动态调整窗口大小"""
+        if not self.page:
+            self.logger.warning("Cannot resize window: page not initialized")
+            return
+
+        try:
+            await self.page.set_viewport_size({"width": width, "height": height})
+            self.logger.info(f"Window resized to {width}x{height}")
+        except Exception as e:
+            self.logger.error(f"Failed to resize window: {str(e)}")
+
+    async def get_window_size(self) -> dict:
+        """获取当前窗口大小"""
+        if not self.page:
+            return {"width": 0, "height": 0}
+
+        try:
+            size = await self.page.evaluate("""
+                return {
+                    width: window.innerWidth,
+                    height: window.innerHeight
+                }
+            """)
+            return size
+        except Exception as e:
+            self.logger.error(f"Failed to get window size: {str(e)}")
+            return {"width": 0, "height": 0}
 
     async def _cleanup_browser(self) -> None:
         """Clean up browser resources"""

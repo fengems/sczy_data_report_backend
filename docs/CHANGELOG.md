@@ -8,6 +8,18 @@
 ## [Unreleased]
 
 ### 新增
+- 📦 **商品档案爬虫模块** (2025-10-18 13:34:48)
+  - `app/crawlers/goods_archive.py` - 完整的商品档案导出自动化
+  - 智能定位filter区域 (`.filter__button-wrap` 或 `.filter__operation__btn-wrap`)
+  - 精确查找导出按钮 (文本为"导出")
+  - 自动hover操作显示dropdown菜单 (`.ivu-select-dropdown`)
+  - 查找并点击"基础信息导出"项 (`li.ivu-dropdown-item`)
+  - 处理modal弹窗，点击"确认导出"按钮
+  - 自动等待并处理文件下载
+  - 多选择器备用策略，确保兼容性
+  - 完善的错误处理和截图调试功能
+  - 详细的日志记录和状态跟踪
+
 - 🔐 完整的ERP登录功能实现 (2024-10-18)
   - SPA单页面应用JavaScript渲染处理
   - 精确的表单元素定位和操作
@@ -26,9 +38,16 @@
 - 🛠️ 增强调试能力，支持详细的元素定位日志
 
 ### 测试
+- ✅ 添加商品档案爬虫测试脚本 (`tests/test_goods_archive_crawler.py`)
+- ✅ 创建便捷运行脚本 (`run_goods_archive_crawler.py`)
 - ✅ 添加完整的登录功能测试脚本
 - ✅ 实现自动化测试验证流程
 - ✅ 支持调试截图保存
+
+### 新增文件
+- `app/crawlers/goods_archive.py` - 商品档案爬虫主模块 (321行)
+- `tests/test_goods_archive_crawler.py` - 测试脚本 (45行)
+- `run_goods_archive_crawler.py` - 便捷运行脚本 (38行)
 
 ### 计划中
 - 数据处理模块实现
