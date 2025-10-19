@@ -197,3 +197,6 @@ secrets.yaml
 *.bak
 *.backup
 *.tmp
+
+
+claude_code_env.sh
