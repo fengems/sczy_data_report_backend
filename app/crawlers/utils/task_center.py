@@ -4,6 +4,7 @@
 """
 
 import asyncio
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -17,6 +18,20 @@ class TaskCenterUtils:
         self.page = page
         self.logger = get_logger("task_center")
         self._temp_url = None  # 临时存储下载URL
+
+    def _generate_timestamped_filename(self, base_filename: str) -> str:
+        """
+        生成带时间戳的文件名
+
+        Args:
+            base_filename: 基础文件名（不包含扩展名）
+
+        Returns:
+            str: 带时间戳的文件名
+        """
+        # 获取当前时间，格式为 YYYYMMDDHHMMSS
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        return f"{base_filename}_{timestamp}"
 
     async def wait_for_export_task(
         self,
@@ -160,21 +175,37 @@ class TaskCenterUtils:
             download = await download_promise
 
             # 确定文件名
+            final_filename = None
             if filename:
-                # 使用提供的文件名，保持原扩展名
+                # 使用提供的文件名，并添加时间戳，保持原扩展名
                 original_name = download.suggested_filename
                 if original_name and "." in original_name:
                     extension = original_name.split(".")[-1]
-                    filename = f"{filename}.{extension}"
+                    timestamped_name = self._generate_timestamped_filename(filename)
+                    final_filename = f"{timestamped_name}.{extension}"
+                else:
+                    # 如果原文件没有扩展名，直接添加时间戳
+                    final_filename = self._generate_timestamped_filename(filename)
             else:
-                filename = download.suggested_filename
+                # 如果没有提供文件名，使用原始文件名并添加时间戳
+                original_name = download.suggested_filename
+                if original_name:
+                    name_without_ext = original_name.rsplit(".", 1)[0] if "." in original_name else original_name
+                    extension = original_name.split(".")[-1] if "." in original_name else ""
+                    timestamped_name = self._generate_timestamped_filename(name_without_ext)
+                    final_filename = f"{timestamped_name}.{extension}" if extension else timestamped_name
+                else:
+                    final_filename = self._generate_timestamped_filename("downloaded_file")
+
+            if not final_filename:
+                final_filename = self._generate_timestamped_filename("downloaded_file")
 
             # 确保下载目录存在
             download_dir = Path("downloads")
             download_dir.mkdir(exist_ok=True)
 
             # 保存文件
-            download_path = download_dir / filename
+            download_path = download_dir / final_filename
             await download.save_as(download_path)
 
             self.logger.info(f"直接下载成功: {download_path}")
@@ -275,29 +306,140 @@ class TaskCenterUtils:
             # 设置下载监听
             download_promise = self.page.wait_for_event("download", timeout=30000)
 
-            # 点击下载元素
-            await download_element.click()
-            self.logger.info("已点击下载按钮")
+            # 尝试多种点击策略处理模态框遮罩问题
+            success = False
+            last_error = None
+
+            # 策略1: 尝试移除可能阻挡的模态框遮罩
+            try:
+                self.logger.info("尝试移除模态框遮罩...")
+                await self.page.evaluate("""
+                    // 移除可能的模态框遮罩
+                    const modals = document.querySelectorAll('.ivu-modal-wrap, .ivu-modal-mask');
+                    modals.forEach(modal => {
+                        if (modal.style) {
+                            modal.style.display = 'none';
+                            modal.style.visibility = 'hidden';
+                            modal.style.zIndex = '-1';
+                        }
+                    });
+                """)
+                await asyncio.sleep(0.2)
+                await download_element.click()
+                self.logger.info("策略1成功：移除遮罩后点击成功")
+                success = True
+            except Exception as e:
+                self.logger.debug(f"策略1失败: {str(e)}")
+                last_error = e
+
+            # 策略2: 强制点击并绕过事件拦截
+            if not success:
+                try:
+                    self.logger.info("尝试强制点击并绕过事件拦截...")
+                    await download_element.evaluate("""
+                        (element) => {
+                            // 移除pointer-events样式
+                            element.style.pointerEvents = 'auto';
+                            element.style.zIndex = '9999';
+                            // 触发原生点击事件
+                            element.click();
+                        }
+                    """)
+                    self.logger.info("策略2成功：强制点击成功")
+                    success = True
+                except Exception as e:
+                    self.logger.debug(f"策略2失败: {str(e)}")
+                    last_error = e
+
+            # 策略3: 模拟鼠标事件序列
+            if not success:
+                try:
+                    self.logger.info("尝试模拟完整鼠标事件序列...")
+                    await download_element.hover()
+                    await asyncio.sleep(0.1)
+                    await download_element.dispatchEvent("mousedown")
+                    await asyncio.sleep(0.05)
+                    await download_element.dispatchEvent("mouseup")
+                    await asyncio.sleep(0.05)
+                    await download_element.dispatchEvent("click")
+                    self.logger.info("策略3成功：模拟鼠标事件成功")
+                    success = True
+                except Exception as e:
+                    self.logger.debug(f"策略3失败: {str(e)}")
+                    last_error = e
+
+            # 策略4: 使用JavaScript直接触发下载
+            if not success:
+                try:
+                    self.logger.info("尝试JavaScript直接触发...")
+                    # 获取元素的onclick事件或href
+                    click_result = await download_element.evaluate("""
+                        (element) => {
+                            // 尝试获取链接或触发点击
+                            if (element.href) {
+                                window.open(element.href, '_blank');
+                                return 'href_triggered';
+                            }
+                            if (element.onclick) {
+                                element.onclick();
+                                return 'onclick_triggered';
+                            }
+                            // 创建新的点击事件
+                            const event = new MouseEvent('click', {
+                                view: window,
+                                bubbles: true,
+                                cancelable: true
+                            });
+                            element.dispatchEvent(event);
+                            return 'event_dispatched';
+                        }
+                    """)
+                    self.logger.info(f"策略4成功：JavaScript触发成功 - {click_result}")
+                    success = True
+                except Exception as e:
+                    self.logger.debug(f"策略4失败: {str(e)}")
+                    last_error = e
+
+            if not success:
+                error_msg = f"所有点击策略都失败，最后一个错误: {str(last_error) if last_error else 'Unknown error'}"
+                self.logger.warning(error_msg)
+                raise Exception(error_msg)
 
             # 等待下载完成
             download = await download_promise
 
             # 确定文件名
+            final_filename = None
             if filename:
-                # 使用提供的文件名，保持原扩展名
+                # 使用提供的文件名，并添加时间戳，保持原扩展名
                 original_name = download.suggested_filename
                 if original_name and "." in original_name:
                     extension = original_name.split(".")[-1]
-                    filename = f"{filename}.{extension}"
+                    timestamped_name = self._generate_timestamped_filename(filename)
+                    final_filename = f"{timestamped_name}.{extension}"
+                else:
+                    # 如果原文件没有扩展名，直接添加时间戳
+                    final_filename = self._generate_timestamped_filename(filename)
             else:
-                filename = download.suggested_filename
+                # 如果没有提供文件名，使用原始文件名并添加时间戳
+                original_name = download.suggested_filename
+                if original_name:
+                    name_without_ext = original_name.rsplit(".", 1)[0] if "." in original_name else original_name
+                    extension = original_name.split(".")[-1] if "." in original_name else ""
+                    timestamped_name = self._generate_timestamped_filename(name_without_ext)
+                    final_filename = f"{timestamped_name}.{extension}" if extension else timestamped_name
+                else:
+                    final_filename = self._generate_timestamped_filename("downloaded_file")
+
+            if not final_filename:
+                final_filename = self._generate_timestamped_filename("downloaded_file")
 
             # 确保下载目录存在
             download_dir = Path("downloads")
             download_dir.mkdir(exist_ok=True)
 
             # 保存文件
-            download_path = download_dir / filename
+            download_path = download_dir / final_filename
             await download.save_as(download_path)
 
             self.logger.info(f"文件下载成功: {download_path}")

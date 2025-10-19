@@ -5,6 +5,27 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 并且本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.0] - 2025-10-19
+
+### 新增
+- ✨ **文件自动时间戳命名功能**：所有导出文件自动添加时间戳后缀
+- 🎯 **防文件覆盖保护**：解决多次导出同名文件造成的数据丢失问题
+- 📁 **统一文件命名规范**：基础名称_YYYYMMDDHHMMSS.扩展名
+
+### 改进
+- 🔧 TaskCenterUtils工具类重构，增强文件管理能力
+- 📝 优化下载方法：`_wait_for_direct_download()`和`_click_and_download()`
+- 🧪 添加时间戳生成功能测试用例
+
+### 修复
+- 🐛 **修复文件覆盖风险**：每次导出生成唯一文件名
+- 🛡️ 增强数据安全性：避免意外覆盖历史导出文件
+
+### 技术细节
+- 新增`_generate_timestamped_filename()`方法，生成格式：`基础名称_YYYYMMDDHHMMSS`
+- 支持自定义文件名和自动文件名的时间戳添加
+- 兼容所有爬虫模块：商品档案爬虫、订单爬虫等
+
 ## [Unreleased]
 
 ### 新增
