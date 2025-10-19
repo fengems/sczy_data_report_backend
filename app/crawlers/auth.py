@@ -26,7 +26,8 @@ class ERPAuthCrawler(BaseCrawler):
             self.logger.info(f"Navigated to login page: {settings.erp_base_url}{settings.erp_login_page}")
 
             # 等待页面加载完成
-            await self.page.wait_for_load_state("networkidle")
+            if self.page:
+                await self.page.wait_for_load_state("networkidle")
 
             # 对于SPA应用，需要等待JavaScript渲染完成
             # 等待root-master元素被填充内容
@@ -39,10 +40,11 @@ class ERPAuthCrawler(BaseCrawler):
 
             while waited_time < max_wait_time:
                 # 检查是否有input元素出现
-                inputs = await self.page.query_selector_all("input")
-                if len(inputs) > 0:
-                    self.logger.info(f"SPA渲染完成，找到{len(inputs)}个input元素")
-                    break
+                if self.page:
+                    inputs = await self.page.query_selector_all("input")
+                    if len(inputs) > 0:
+                        self.logger.info(f"SPA渲染完成，找到{len(inputs)}个input元素")
+                        break
 
                 await asyncio.sleep(wait_interval)
                 waited_time += wait_interval
@@ -67,17 +69,19 @@ class ERPAuthCrawler(BaseCrawler):
 
             for selector in username_selectors:
                 try:
-                    username_input = await self.page.wait_for_selector(selector, timeout=5000)
-                    if username_input:
-                        found_selector = selector
-                        self.logger.info(f"找到用户名输入框，选择器: {selector}")
-                        break
+                    if self.page:
+                        username_input = await self.page.wait_for_selector(selector, timeout=5000)
+                        if username_input:
+                            self.logger.info(f"找到用户名输入框，选择器: {selector}")
+                            break
                 except:
                     continue
 
             if not username_input:
                 # 如果还是没找到，打印更多信息用于调试
-                all_inputs = await self.page.query_selector_all("input")
+                all_inputs = []
+                if self.page:
+                    all_inputs = await self.page.query_selector_all("input")
                 self.logger.warning(f"未找到用户名输入框。页面中总共有{len(all_inputs)}个input元素")
                 for i, inp in enumerate(all_inputs):
                     try:
@@ -106,10 +110,11 @@ class ERPAuthCrawler(BaseCrawler):
             password_input = None
             for selector in password_selectors:
                 try:
-                    password_input = await self.page.wait_for_selector(selector, timeout=5000)
-                    if password_input:
-                        self.logger.info(f"找到密码输入框，选择器: {selector}")
-                        break
+                    if self.page:
+                        password_input = await self.page.wait_for_selector(selector, timeout=5000)
+                        if password_input:
+                            self.logger.info(f"找到密码输入框，选择器: {selector}")
+                            break
                 except:
                     continue
 
@@ -138,16 +143,19 @@ class ERPAuthCrawler(BaseCrawler):
             login_button = None
             for selector in login_button_selectors:
                 try:
-                    login_button = await self.page.wait_for_selector(selector, timeout=5000)
-                    if login_button:
-                        self.logger.info(f"找到登录按钮，选择器: {selector}")
-                        break
+                    if self.page:
+                        login_button = await self.page.wait_for_selector(selector, timeout=5000)
+                        if login_button:
+                            self.logger.info(f"找到登录按钮，选择器: {selector}")
+                            break
                 except:
                     continue
 
             if not login_button:
                 # 调试：打印所有button信息
-                all_buttons = await self.page.query_selector_all("button")
+                all_buttons = []
+                if self.page:
+                    all_buttons = await self.page.query_selector_all("button")
                 self.logger.warning(f"未找到登录按钮。页面中总共有{len(all_buttons)}个button元素")
                 for i, btn in enumerate(all_buttons):
                     try:
@@ -166,16 +174,17 @@ class ERPAuthCrawler(BaseCrawler):
             target_url = "https://scm.sdongpo.com/cc_sssp/superAdmin/viewCenter/v1/index"
             try:
                 # 等待URL跳转，最多等待30秒
-                await self.page.wait_for_url(
-                    target_url,
-                    timeout=30000,
-                    wait_until="networkidle"
-                )
-                self.logger.info(f"成功跳转到目标URL: {target_url}")
-                return True
+                if self.page:
+                    await self.page.wait_for_url(
+                        target_url,
+                        timeout=30000,
+                        wait_until="networkidle"
+                    )
+                    self.logger.info(f"成功跳转到目标URL: {target_url}")
+                    return True
             except Exception as url_error:
                 # 检查当前URL是否已经是目标URL
-                current_url = self.page.url
+                current_url = self.page.url if self.page else ""
                 if current_url == target_url:
                     self.logger.info(f"已经在目标URL: {current_url}")
                     return True
@@ -193,7 +202,7 @@ class ERPAuthCrawler(BaseCrawler):
                         ]
 
                         for error_selector in error_selectors:
-                            error_element = await self.page.query_selector(error_selector)
+                            error_element = await self.page.query_selector(error_selector) if self.page else None
                             if error_element:
                                 error_text = await error_element.text_content()
                                 if error_text and error_text.strip():
@@ -212,7 +221,7 @@ class ERPAuthCrawler(BaseCrawler):
                 self.logger.info(f"登录错误截图已保存: {screenshot_path}")
             except:
                 pass
-            raise
+            return False
 
     async def _handle_captcha(self) -> None:
         """
@@ -246,12 +255,13 @@ class ERPAuthCrawler(BaseCrawler):
 
             for selector in logout_selectors:
                 try:
-                    element = await self.page.query_selector(selector)
-                    if element:
-                        await element.click()
-                        await self.page.wait_for_load_state("networkidle")
-                        self.logger.info("Logout successful")
-                        return True
+                    if self.page:
+                        element = await self.page.query_selector(selector)
+                        if element:
+                            await element.click()
+                            await self.page.wait_for_load_state("networkidle")
+                            self.logger.info("Logout successful")
+                            return True
                 except:
                     continue
 

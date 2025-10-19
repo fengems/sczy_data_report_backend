@@ -33,7 +33,7 @@ class BaseCrawler(ABC):
         finally:
             await self._cleanup_browser()
 
-    async def _init_browser(self, context_options: Dict[str, Any] = None) -> None:
+    async def _init_browser(self, context_options: Optional[Dict[str, Any]] = None) -> None:
         """Initialize browser
 
         Args:
@@ -60,9 +60,10 @@ class BaseCrawler(ABC):
             self.page = await self.context.new_page()
 
             # Set download path
-            await self.page.context.set_extra_http_headers({
-                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"
-            })
+            if self.page and self.page.context:
+                await self.page.context.set_extra_http_headers({
+                    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"
+                })
 
             self.logger.info("Browser initialized successfully")
 
@@ -90,7 +91,8 @@ class BaseCrawler(ABC):
         """设置调试模式下的便利功能"""
         try:
             # 添加一些JavaScript代码，方便调试
-            await self.page.add_init_script("""
+            if self.page:
+                await self.page.add_init_script("""
                 // 添加全局调试函数
                 window.debugScroll = function(x = 0, y = 0) {
                     window.scrollTo(x, y);
@@ -191,8 +193,9 @@ class BaseCrawler(ABC):
 
         try:
             element = await self.page.wait_for_selector(selector, timeout=timeout)
-            await element.click()
-            self.logger.debug(f"Clicked element: {selector}")
+            if element:
+                await element.click()
+                self.logger.debug(f"Clicked element: {selector}")
         except Exception as e:
             self.logger.error(f"Failed to click element {selector}: {str(e)}")
             raise
@@ -208,6 +211,18 @@ class BaseCrawler(ABC):
         except Exception as e:
             self.logger.error(f"Element not found: {selector}, error: {str(e)}")
             raise
+
+    def _safe_page_call(self, method_name: str, *args, **kwargs):
+        """安全地调用page方法的辅助函数"""
+        if not self.page:
+            self.logger.warning(f"Cannot call {method_name}: page not initialized")
+            return None
+        try:
+            method = getattr(self.page, method_name)
+            return method(*args, **kwargs)
+        except Exception as e:
+            self.logger.error(f"Error calling page.{method_name}: {str(e)}")
+            return None
 
     async def get_element_text(self, selector: str) -> str:
         """Get element text"""
@@ -241,7 +256,7 @@ class BaseCrawler(ABC):
             self.logger.error(f"Download failed: {str(e)}")
             raise
 
-    async def take_screenshot(self, filename: str = None) -> str:
+    async def take_screenshot(self, filename: Optional[str] = None) -> str:
         """Take screenshot"""
         if not self.page:
             raise RuntimeError("Browser not initialized")
@@ -291,7 +306,7 @@ class BaseCrawler(ABC):
         """Crawl data - must be implemented by subclasses"""
         pass
 
-    async def run(self, params: Dict[str, Any] = None) -> Union[str, Dict[str, Any]]:
+    async def run(self, params: Optional[Dict[str, Any]] = None) -> Union[str, Dict[str, Any]]:
         """Run complete crawler workflow"""
         if params is None:
             params = {}

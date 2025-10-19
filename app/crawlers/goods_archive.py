@@ -4,11 +4,8 @@
 """
 import asyncio
 from typing import Dict, Any, Optional
-from pathlib import Path
 
 from app.crawlers.base import BaseCrawler
-from app.config.settings import settings
-from app.utils.logger import get_logger
 from app.crawlers.utils import wait_for_export_task
 
 
@@ -32,6 +29,16 @@ class GoodsArchiveCrawler(BaseCrawler):
 
         return await auth_crawler.login()
 
+    def _safe_page_method(self, method_name: str, *args, **kwargs):
+        """安全调用page方法"""
+        if not self.page:
+            return None
+        try:
+            return getattr(self.page, method_name)(*args, **kwargs)
+        except Exception as e:
+            self.logger.error(f"Error calling page.{method_name}: {e}")
+            return None
+
     async def find_filter_section(self) -> Optional[Any]:
         """
         步骤1: 找到filter部分
@@ -41,7 +48,8 @@ class GoodsArchiveCrawler(BaseCrawler):
             self.logger.info("开始定位filter部分...")
 
             # 等待页面基本加载完成，不需要networkidle
-            await self.page.wait_for_load_state("domcontentloaded")
+            if self.page:
+                await self.page.wait_for_load_state("domcontentloaded")
             await asyncio.sleep(0.5)  # 短暂等待确保JS渲染完成
 
             # 尝试多个可能的filter选择器
@@ -56,14 +64,12 @@ class GoodsArchiveCrawler(BaseCrawler):
 
             # 直接并行查找所有可能的filter元素
             filter_element = None
-            found_selector = None
 
             for selector in filter_selectors:
                 try:
-                    element = await self.page.wait_for_selector(selector, timeout=2000)
+                    element = await self._safe_page_method('wait_for_selector', selector, timeout=2000)
                     if element and await element.is_visible():
                         filter_element = element
-                        found_selector = selector
                         self.logger.info(f"找到filter部分，选择器: {selector}")
                         break
                 except:
@@ -74,10 +80,10 @@ class GoodsArchiveCrawler(BaseCrawler):
                 self.logger.info("快速查找失败，尝试备用方案...")
                 # 直接查找导出按钮，减少遍历所有按钮的开销
                 try:
-                    export_button = await self.page.wait_for_selector("button:has-text('导出')", timeout=3000)
+                    if self.page:
+                        export_button = await self.page.wait_for_selector("button:has-text('导出')", timeout=3000)
                     if export_button and await export_button.is_visible():
                         filter_element = export_button
-                        found_selector = "export_button_direct"
                         self.logger.info("直接找到导出按钮，作为filter区域")
                 except:
                     pass
