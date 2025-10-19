@@ -99,7 +99,7 @@ class OrderCrawler(BaseCrawler):
         base_filter = await page.wait_for_selector(".base-filter", timeout=10000)
 
         # 在baseFilter内部找到filterAdvanace元素
-        filter_advance = await base_filter.query_selector(".filter__advance-trigger")
+        filter_advance = base_filter.query_selector(".filter__advance-trigger")
 
         if filter_advance:
             # 获取元素文本
@@ -126,7 +126,7 @@ class OrderCrawler(BaseCrawler):
 
         # 获取所有筛选项
         page = self._ensure_page()
-        filter_cols = await page.query_selector_all(".filter__col")
+        filter_cols = page.query_selector_all(".filter__col")
 
         if delivery_date_range:
             # 填写发货日期
@@ -158,7 +158,7 @@ class OrderCrawler(BaseCrawler):
 
         for col in filter_cols:
             # 查找input元素
-            input_element = await col.query_selector("input")
+            input_element = col.query_selector("input")
             if input_element:
                 input_placeholder = await input_element.get_attribute("placeholder")
                 input_type = await input_element.get_attribute("type")
@@ -178,7 +178,7 @@ class OrderCrawler(BaseCrawler):
         if not target_filter_col:
             for col in filter_cols:
                 # 尝试多种方式获取标签文本
-                elements_to_check = await col.query_selector_all("label, span, div")
+                elements_to_check = col.query_selector_all("label, span, div")
 
                 for element in elements_to_check:
                     text_content = await element.text_content()
@@ -202,7 +202,7 @@ class OrderCrawler(BaseCrawler):
             raise Exception(f"找不到{label_name}筛选项")
 
         # 找到input元素
-        input_element = await target_filter_col.query_selector("input")
+        input_element = target_filter_col.query_selector("input")
         if not input_element:
             raise Exception(f"在{label_name}筛选项中找不到input元素")
 
@@ -236,7 +236,7 @@ class OrderCrawler(BaseCrawler):
             raise Exception("找不到筛选项按钮区域")
 
         # 找到查询按钮
-        search_buttons = await filter_btns.query_selector_all("button")
+        search_buttons = filter_btns.query_selector_all("button")
         search_button = None
 
         for btn in search_buttons:
@@ -258,12 +258,12 @@ class OrderCrawler(BaseCrawler):
 
         # 获取筛选项按钮区域
         page = self._ensure_page()
-        filter_btns = await page.query_selector(".filter__button-wrap")
+        filter_btns = page.query_selector(".filter__button-wrap")
         if not filter_btns:
             raise Exception("找不到筛选项按钮区域")
 
         # 找到export-box
-        export_box = await filter_btns.query_selector(".export-box")
+        export_box = filter_btns.query_selector(".export-box")
         if not export_box:
             raise Exception("找不到导出框")
 
@@ -273,7 +273,7 @@ class OrderCrawler(BaseCrawler):
 
         # 找到"订单明细"按钮
         order_detail_btn = None
-        dropdown_items = await export_box.query_selector_all(".ivu-dropdown-item")
+        dropdown_items = export_box.query_selector_all(".ivu-dropdown-item")
 
         for item in dropdown_items:
             item_text = await item.text_content()
@@ -309,7 +309,7 @@ class OrderCrawler(BaseCrawler):
 
         # 找到可见的modal
         page = self._ensure_page()
-        modals = await page.query_selector_all(".ivu-modal")
+        modals = page.query_selector_all(".ivu-modal")
         visible_modal = None
 
         for modal in modals:
@@ -325,12 +325,12 @@ class OrderCrawler(BaseCrawler):
         modal = visible_modal
 
         # 找到checkbox group
-        checkbox_group = await modal.query_selector(".ivu-checkbox-group")
+        checkbox_group = modal.query_selector(".ivu-checkbox-group")
         if not checkbox_group:
             raise Exception("modal中找不到checkbox group")
 
         # 找到所有labels
-        labels = await checkbox_group.query_selector_all("label.ivu-checkbox-group-item")
+        labels = checkbox_group.query_selector_all("label.ivu-checkbox-group-item")
 
         # 遍历所有labels，设置勾选状态
         for label in labels:
@@ -339,7 +339,7 @@ class OrderCrawler(BaseCrawler):
                 label_text = label_text.strip()
 
                 # 找到对应的checkbox input
-                checkbox_input = await label.query_selector("input[type='checkbox']")
+                checkbox_input = label.query_selector("input[type='checkbox']")
                 if checkbox_input:
                     is_checked = await checkbox_input.is_checked()
                     should_be_checked = label_text in fields_to_export
@@ -357,7 +357,7 @@ class OrderCrawler(BaseCrawler):
 
         # 找到modal - 使用之前找到的可见modal逻辑
         page = self._ensure_page()
-        modals = await page.query_selector_all(".ivu-modal")
+        modals = page.query_selector_all(".ivu-modal")
         visible_modal = None
 
         for modal in modals:
@@ -373,12 +373,12 @@ class OrderCrawler(BaseCrawler):
         modal = visible_modal
 
         # 在modal中找到footer
-        modal_footer = await modal.query_selector(".ivu-modal-footer")
+        modal_footer = modal.query_selector(".ivu-modal-footer")
         if not modal_footer:
             raise Exception("modal中找不到footer")
 
         # 在footer中找到确认导出按钮
-        export_button = await modal_footer.query_selector("button:has-text('确认导出')")
+        export_button = modal_footer.query_selector("button:has-text('确认导出')")
         if not export_button:
             raise Exception("modal footer中找不到确认导出按钮")
 
