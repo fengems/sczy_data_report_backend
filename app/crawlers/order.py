@@ -2,11 +2,10 @@
 订单中心爬虫模块
 """
 import asyncio
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any
 
 from app.crawlers.base import BaseCrawler
 from app.crawlers.utils.task_center import TaskCenterUtils
-from app.utils.logger import get_logger
 
 
 class OrderCrawler(BaseCrawler):
@@ -99,16 +98,16 @@ class OrderCrawler(BaseCrawler):
         base_filter = await page.wait_for_selector(".base-filter", timeout=10000)
 
         # 在baseFilter内部找到filterAdvanace元素
-        filter_advance = base_filter.query_selector(".filter__advance-trigger")
+        filter_advance = base_filter.query_selector(".filter__advance-trigger")  # type: ignore
 
         if filter_advance:
             # 获取元素文本
-            text_content = await filter_advance.text_content()
+            text_content = await filter_advance.text_content()  # type: ignore
 
             if text_content and text_content.strip() == "高级筛选":
                 # 需要点击展开
                 self.logger.info("点击展开高级筛选...")
-                await filter_advance.click()
+                await filter_advance.click()  # type: ignore
                 # 等待展开动画完成
                 await asyncio.sleep(0.5)
             else:
@@ -126,7 +125,7 @@ class OrderCrawler(BaseCrawler):
 
         # 获取所有筛选项
         page = self._ensure_page()
-        filter_cols = page.query_selector_all(".filter__col")
+        filter_cols = page.query_selector_all(".filter__col")  # type: ignore
 
         if delivery_date_range:
             # 填写发货日期
@@ -236,11 +235,11 @@ class OrderCrawler(BaseCrawler):
             raise Exception("找不到筛选项按钮区域")
 
         # 找到查询按钮
-        search_buttons = filter_btns.query_selector_all("button")
+        search_buttons = filter_btns.query_selector_all("button")  # type: ignore
         search_button = None
 
-        for btn in search_buttons:
-            btn_text = await btn.text_content()
+        for btn in search_buttons:  # type: ignore
+            btn_text = await btn.text_content()  # type: ignore
             if btn_text and btn_text.strip() == "查询":
                 search_button = btn
                 break
@@ -258,12 +257,12 @@ class OrderCrawler(BaseCrawler):
 
         # 获取筛选项按钮区域
         page = self._ensure_page()
-        filter_btns = page.query_selector(".filter__button-wrap")
+        filter_btns = page.query_selector(".filter__button-wrap")  # type: ignore
         if not filter_btns:
             raise Exception("找不到筛选项按钮区域")
 
         # 找到export-box
-        export_box = filter_btns.query_selector(".export-box")
+        export_box = filter_btns.query_selector(".export-box")  # type: ignore
         if not export_box:
             raise Exception("找不到导出框")
 
@@ -273,7 +272,7 @@ class OrderCrawler(BaseCrawler):
 
         # 找到"订单明细"按钮
         order_detail_btn = None
-        dropdown_items = export_box.query_selector_all(".ivu-dropdown-item")
+        dropdown_items = export_box.query_selector_all(".ivu-dropdown-item")  # type: ignore
 
         for item in dropdown_items:
             item_text = await item.text_content()
@@ -309,11 +308,11 @@ class OrderCrawler(BaseCrawler):
 
         # 找到可见的modal
         page = self._ensure_page()
-        modals = page.query_selector_all(".ivu-modal")
+        modals = page.query_selector_all(".ivu-modal")  # type: ignore
         visible_modal = None
 
-        for modal in modals:
-            is_visible = await modal.is_visible()
+        for modal in modals:  # type: ignore
+            is_visible = await modal.is_visible()  # type: ignore
             if is_visible:
                 visible_modal = modal
                 self.logger.info("找到可见的modal")
@@ -357,11 +356,11 @@ class OrderCrawler(BaseCrawler):
 
         # 找到modal - 使用之前找到的可见modal逻辑
         page = self._ensure_page()
-        modals = page.query_selector_all(".ivu-modal")
+        modals = page.query_selector_all(".ivu-modal")  # type: ignore
         visible_modal = None
 
-        for modal in modals:
-            is_visible = await modal.is_visible()
+        for modal in modals:  # type: ignore
+            is_visible = await modal.is_visible()  # type: ignore
             if is_visible:
                 visible_modal = modal
                 self.logger.info("找到可见的modal")
