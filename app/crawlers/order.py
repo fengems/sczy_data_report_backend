@@ -95,19 +95,22 @@ class OrderCrawler(BaseCrawler):
 
         # 找到baseFilter元素
         page = self._ensure_page()
-        base_filter = await page.wait_for_selector(".base-filter", timeout=10000)
+        base_filter = page.locator(".base-filter")
+
+        if await base_filter.count() == 0:
+            raise Exception("找不到baseFilter元素")
 
         # 在baseFilter内部找到filterAdvanace元素
-        filter_advance = base_filter.query_selector(".filter__advance-trigger")  # type: ignore
+        filter_advance = base_filter.locator(".filter__advance-trigger")
 
-        if filter_advance:
-            # 获取元素文本
-            text_content = await filter_advance.text_content()  # type: ignore
+        if await filter_advance.count() > 0:
+            # 获取第一个元素的文本
+            text_content = await filter_advance.first.text_content()
 
             if text_content and text_content.strip() == "高级筛选":
                 # 需要点击展开
                 self.logger.info("点击展开高级筛选...")
-                await filter_advance.click()  # type: ignore
+                await filter_advance.first.click()
                 # 等待展开动画完成
                 await asyncio.sleep(0.5)
             else:
@@ -125,7 +128,7 @@ class OrderCrawler(BaseCrawler):
 
         # 获取所有筛选项
         page = self._ensure_page()
-        filter_cols = page.query_selector_all(".filter__col")  # type: ignore
+        filter_cols = page.locator(".filter__col")
 
         if delivery_date_range:
             # 填写发货日期
@@ -155,19 +158,25 @@ class OrderCrawler(BaseCrawler):
             "下单时间": ["下单", "订单", "时间", "order"]
         }
 
-        for col in filter_cols:
-            # 查找input元素
-            input_element = col.query_selector("input")
-            if input_element:
-                input_placeholder = await input_element.get_attribute("placeholder")
-                input_type = await input_element.get_attribute("type")
+        for col in await filter_cols.all():
+            # 查找所有input元素
+            input_elements = col.locator("input")
+            if await input_elements.count() > 0:
+                # 遍历所有input元素，找到我们需要的那一个
+                for i in range(await input_elements.count()):
+                    input_element = input_elements.nth(i)
+                    input_placeholder = await input_element.get_attribute("placeholder")
+                    input_type = await input_element.get_attribute("type")
 
-                # 检查placeholder或类型是否匹配
-                for keyword in date_keywords.get(label_name, []):
-                    if (input_placeholder and keyword in input_placeholder) or \
-                       (input_type and "date" in input_type.lower()):
-                        target_filter_col = col
-                        self.logger.info(f"通过input属性找到{label_name}筛选项，placeholder: {input_placeholder}, type: {input_type}")
+                    # 检查placeholder或类型是否匹配
+                    for keyword in date_keywords.get(label_name, []):
+                        if (input_placeholder and keyword in input_placeholder) or \
+                           (input_type and "date" in input_type.lower()):
+                            target_filter_col = col
+                            self.logger.info(f"通过input属性找到{label_name}筛选项，placeholder: {input_placeholder}, type: {input_type}")
+                            break
+
+                    if target_filter_col:
                         break
 
             if target_filter_col:
@@ -175,11 +184,11 @@ class OrderCrawler(BaseCrawler):
 
         # 如果通过input属性没找到，尝试文本匹配
         if not target_filter_col:
-            for col in filter_cols:
+            for col in await filter_cols.all():
                 # 尝试多种方式获取标签文本
-                elements_to_check = col.query_selector_all("label, span, div")
+                elements_to_check = col.locator("label, span, div")
 
-                for element in elements_to_check:
+                for element in await elements_to_check.all():
                     text_content = await element.text_content()
                     if text_content:
                         text_content = text_content.strip()
@@ -200,10 +209,31 @@ class OrderCrawler(BaseCrawler):
         if not target_filter_col:
             raise Exception(f"找不到{label_name}筛选项")
 
-        # 找到input元素
-        input_element = target_filter_col.query_selector("input")
-        if not input_element:
+        # 找到input元素（之前已经找到了正确的input_element）
+        # 重新确认input元素的存在和获取正确的input
+        input_elements = target_filter_col.locator("input")
+        if await input_elements.count() == 0:
             raise Exception(f"在{label_name}筛选项中找不到input元素")
+
+        # 找到第一个符合日期筛选条件的input（不是隐藏的那个）
+        input_element = None
+        for i in range(await input_elements.count()):
+            candidate = input_elements.nth(i)
+            placeholder = await candidate.get_attribute("placeholder")
+            input_type = await candidate.get_attribute("type")
+
+            # 检查是否是我们要的日期输入框
+            for keyword in date_keywords.get(label_name, []):
+                if (placeholder and keyword in placeholder) or \
+                   (input_type and "date" in input_type.lower()):
+                    input_element = candidate
+                    break
+
+            if input_element:
+                break
+
+        if not input_element:
+            raise Exception(f"在{label_name}筛选项中找不到合适的input元素")
 
         if clear:
             # 清空输入
@@ -229,17 +259,17 @@ class OrderCrawler(BaseCrawler):
 
         # 获取筛选项按钮区域
         page = self._ensure_page()
-        filter_btns = await page.wait_for_selector(".filter__button-wrap", timeout=10000)
+        filter_btns = page.locator(".filter__button-wrap")
 
-        if not filter_btns:
+        if await filter_btns.count() == 0:
             raise Exception("找不到筛选项按钮区域")
 
         # 找到查询按钮
-        search_buttons = filter_btns.query_selector_all("button")  # type: ignore
+        search_buttons = filter_btns.locator("button")
         search_button = None
 
-        for btn in search_buttons:  # type: ignore
-            btn_text = await btn.text_content()  # type: ignore
+        for btn in await search_buttons.all():
+            btn_text = await btn.text_content()
             if btn_text and btn_text.strip() == "查询":
                 search_button = btn
                 break
@@ -257,13 +287,13 @@ class OrderCrawler(BaseCrawler):
 
         # 获取筛选项按钮区域
         page = self._ensure_page()
-        filter_btns = page.query_selector(".filter__button-wrap")  # type: ignore
-        if not filter_btns:
+        filter_btns = page.locator(".filter__button-wrap")
+        if await filter_btns.count() == 0:
             raise Exception("找不到筛选项按钮区域")
 
         # 找到export-box
-        export_box = filter_btns.query_selector(".export-box")  # type: ignore
-        if not export_box:
+        export_box = filter_btns.locator(".export-box")
+        if await export_box.count() == 0:
             raise Exception("找不到导出框")
 
         # hover到export-box
@@ -272,9 +302,9 @@ class OrderCrawler(BaseCrawler):
 
         # 找到"订单明细"按钮
         order_detail_btn = None
-        dropdown_items = export_box.query_selector_all(".ivu-dropdown-item")  # type: ignore
+        dropdown_items = export_box.locator(".ivu-dropdown-item")
 
-        for item in dropdown_items:
+        for item in await dropdown_items.all():
             item_text = await item.text_content()
             if item_text and item_text.strip() == "订单明细":
                 order_detail_btn = item
@@ -308,12 +338,11 @@ class OrderCrawler(BaseCrawler):
 
         # 找到可见的modal
         page = self._ensure_page()
-        modals = page.query_selector_all(".ivu-modal")  # type: ignore
+        modals = page.locator(".ivu-modal")
         visible_modal = None
 
-        for modal in modals:  # type: ignore
-            is_visible = await modal.is_visible()  # type: ignore
-            if is_visible:
+        for modal in await modals.all():
+            if await modal.is_visible():
                 visible_modal = modal
                 self.logger.info("找到可见的modal")
                 break
@@ -324,22 +353,22 @@ class OrderCrawler(BaseCrawler):
         modal = visible_modal
 
         # 找到checkbox group
-        checkbox_group = modal.query_selector(".ivu-checkbox-group")
-        if not checkbox_group:
+        checkbox_group = modal.locator(".ivu-checkbox-group")
+        if await checkbox_group.count() == 0:
             raise Exception("modal中找不到checkbox group")
 
         # 找到所有labels
-        labels = checkbox_group.query_selector_all("label.ivu-checkbox-group-item")
+        labels = checkbox_group.locator("label.ivu-checkbox-group-item")
 
         # 遍历所有labels，设置勾选状态
-        for label in labels:
+        for label in await labels.all():
             label_text = await label.text_content()
             if label_text:
                 label_text = label_text.strip()
 
                 # 找到对应的checkbox input
-                checkbox_input = label.query_selector("input[type='checkbox']")
-                if checkbox_input:
+                checkbox_input = label.locator("input[type='checkbox']")
+                if await checkbox_input.count() > 0:
                     is_checked = await checkbox_input.is_checked()
                     should_be_checked = label_text in fields_to_export
 
@@ -356,12 +385,11 @@ class OrderCrawler(BaseCrawler):
 
         # 找到modal - 使用之前找到的可见modal逻辑
         page = self._ensure_page()
-        modals = page.query_selector_all(".ivu-modal")  # type: ignore
+        modals = page.locator(".ivu-modal")
         visible_modal = None
 
-        for modal in modals:  # type: ignore
-            is_visible = await modal.is_visible()  # type: ignore
-            if is_visible:
+        for modal in await modals.all():
+            if await modal.is_visible():
                 visible_modal = modal
                 self.logger.info("找到可见的modal")
                 break
@@ -372,13 +400,13 @@ class OrderCrawler(BaseCrawler):
         modal = visible_modal
 
         # 在modal中找到footer
-        modal_footer = modal.query_selector(".ivu-modal-footer")
-        if not modal_footer:
+        modal_footer = modal.locator(".ivu-modal-footer")
+        if await modal_footer.count() == 0:
             raise Exception("modal中找不到footer")
 
         # 在footer中找到确认导出按钮
-        export_button = modal_footer.query_selector("button:has-text('确认导出')")
-        if not export_button:
+        export_button = modal_footer.locator("button:has-text('确认导出')")
+        if await export_button.count() == 0:
             raise Exception("modal footer中找不到确认导出按钮")
 
         # 检查按钮是否可见

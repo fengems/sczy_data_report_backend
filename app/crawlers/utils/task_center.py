@@ -115,11 +115,11 @@ class TaskCenterUtils:
 
             if not task_button:
                 # 备用方案：查找所有按钮，寻找包含"任务"文本的
-                all_buttons = await self.page.query_selector_all(
-                    "button, [class*='btn'], [role='button']"
-                )
-                for button in all_buttons:
+                all_buttons = self.page.locator("button, [class*='btn'], [role='button']")
+                button_count = await all_buttons.count()
+                for i in range(button_count):
                     try:
+                        button = all_buttons.nth(i)
                         text = await button.text_content()
                         if text and "任务" in text.strip():
                             is_visible = await button.is_visible()

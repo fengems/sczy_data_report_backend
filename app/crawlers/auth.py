@@ -44,9 +44,10 @@ class ERPAuthCrawler(BaseCrawler):
             while waited_time < max_wait_time:
                 # 检查是否有input元素出现
                 if self.page:
-                    inputs = await self.page.query_selector_all("input")
-                    if len(inputs) > 0:
-                        self.logger.info(f"SPA渲染完成，找到{len(inputs)}个input元素")
+                    inputs = self.page.locator("input")
+                    input_count = await inputs.count()
+                    if input_count > 0:
+                        self.logger.info(f"SPA渲染完成，找到{input_count}个input元素")
                         break
 
                 await asyncio.sleep(wait_interval)
@@ -85,12 +86,14 @@ class ERPAuthCrawler(BaseCrawler):
                 # 如果还是没找到，打印更多信息用于调试
                 all_inputs = []
                 if self.page:
-                    all_inputs = await self.page.query_selector_all("input")
+                    all_inputs = self.page.locator("input")
+                    input_count = await all_inputs.count()
                 self.logger.warning(
-                    f"未找到用户名输入框。页面中总共有{len(all_inputs)}个input元素"
+                    f"未找到用户名输入框。页面中总共有{input_count}个input元素"
                 )
-                for i, inp in enumerate(all_inputs):
+                for i in range(input_count):
                     try:
+                        inp = all_inputs.nth(i)
                         placeholder = await inp.get_attribute("placeholder")
                         input_type = await inp.get_attribute("type")
                         name = await inp.get_attribute("name")
@@ -168,12 +171,14 @@ class ERPAuthCrawler(BaseCrawler):
                 # 调试：打印所有button信息
                 all_buttons = []
                 if self.page:
-                    all_buttons = await self.page.query_selector_all("button")
+                    all_buttons = self.page.locator("button")
+                    button_count = await all_buttons.count()
                 self.logger.warning(
-                    f"未找到登录按钮。页面中总共有{len(all_buttons)}个button元素"
+                    f"未找到登录按钮。页面中总共有{button_count}个button元素"
                 )
-                for i, btn in enumerate(all_buttons):
+                for i in range(button_count):
                     try:
+                        btn = all_buttons.nth(i)
                         text = await btn.text_content()
                         class_name = await btn.get_attribute("class")
                         self.logger.debug(
@@ -219,13 +224,9 @@ class ERPAuthCrawler(BaseCrawler):
                         ]
 
                         for error_selector in error_selectors:
-                            error_element = (
-                                await self.page.query_selector(error_selector)
-                                if self.page
-                                else None
-                            )
-                            if error_element:
-                                error_text = await error_element.text_content()
+                            error_locator = self.page.locator(error_selector) if self.page else None
+                            if error_locator and await error_locator.count() > 0:
+                                error_text = await error_locator.first().text_content()
                                 if error_text and error_text.strip():
                                     self.logger.error(f"登录错误信息: {error_text}")
                                     raise RuntimeError(f"登录失败: {error_text}")
@@ -284,9 +285,9 @@ class ERPAuthCrawler(BaseCrawler):
             for selector in logout_selectors:
                 try:
                     if self.page:
-                        element = await self.page.query_selector(selector)
-                        if element:
-                            await element.click()
+                        element = self.page.locator(selector)
+                        if await element.count() > 0:
+                            await element.first().click()
                             await self.page.wait_for_load_state("networkidle")
                             self.logger.info("Logout successful")
                             return True

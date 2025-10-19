@@ -129,8 +129,10 @@ class GoodsArchiveCrawler(BaseCrawler):
             for selector in export_selectors:
                 try:
                     # 如果在filter区域内查找
-                    if filter_element and hasattr(filter_element, "query_selector"):
-                        button = await filter_element.query_selector(selector)
+                    if filter_element and hasattr(filter_element, "locator"):
+                        button = filter_element.locator(selector)
+                        if await button.count() == 0:
+                            button = None
                     else:
                         if self.page:
                             button = await self.page.wait_for_selector(
@@ -153,9 +155,11 @@ class GoodsArchiveCrawler(BaseCrawler):
             if not export_button:
                 self.logger.info("使用备用方案定位导出按钮...")
                 if self.page:
-                    all_buttons = await self.page.query_selector_all("button")
-                    for button in all_buttons:
+                    all_buttons = self.page.locator("button")
+                    button_count = await all_buttons.count()
+                    for i in range(button_count):
                         try:
+                            button = all_buttons.nth(i)
                             text = await button.text_content()
                             if text and text.strip().replace(" ", "") == "导出":
                                 is_visible = await button.is_visible()
@@ -273,12 +277,10 @@ class GoodsArchiveCrawler(BaseCrawler):
                 self.logger.info("直接查找失败，尝试备用方案...")
 
             # 简化的备用方案：只在dropdown_element内查找，避免全局搜索
-            if dropdown_element and hasattr(dropdown_element, "query_selector"):
+            if dropdown_element and hasattr(dropdown_element, "locator"):
                 try:
-                    item = await dropdown_element.query_selector(
-                        "li:has-text('基础信息导出')"
-                    )
-                    if item and await item.is_visible():
+                    item = dropdown_element.locator("li:has-text('基础信息导出')")
+                    if await item.count() > 0 and await item.is_visible():
                         self.logger.info("在dropdown容器内找到目标元素")
                         return item
                 except Exception:
@@ -358,8 +360,10 @@ class GoodsArchiveCrawler(BaseCrawler):
             try:
                 # 增加等待时间，给modal更多出现时间
                 if self.page:
-                    elements = await self.page.query_selector_all(selector)
-                    for element in elements:
+                    elements = self.page.locator(selector)
+                    element_count = await elements.count()
+                    for i in range(element_count):
+                        element = elements.nth(i)
                         is_visible = await element.is_visible()
                         if is_visible:
                             self.logger.info(f"找到modal弹窗，选择器: {selector}")
@@ -382,11 +386,11 @@ class GoodsArchiveCrawler(BaseCrawler):
         confirm_button = None
 
         # 快速查找确认按钮，优先在modal内查找
-        if hasattr(modal_element, "query_selector"):
+        if hasattr(modal_element, "locator"):
             for selector in confirm_selectors:
                 try:
-                    button = await modal_element.query_selector(selector)
-                    if button and await button.is_visible():
+                    button = modal_element.locator(selector)
+                    if await button.count() > 0 and await button.is_visible():
                         confirm_button = button
                         text = await button.text_content()
                         self.logger.info(f"在modal内找到确认按钮: '{text}'")
@@ -440,8 +444,10 @@ class GoodsArchiveCrawler(BaseCrawler):
 
             for indicator in download_indicators:
                 if self.page:
-                    elements = await self.page.query_selector_all(indicator)
-                    for element in elements:
+                    elements = self.page.locator(indicator)
+                    element_count = await elements.count()
+                    for i in range(element_count):
+                        element = elements.nth(i)
                         if await element.is_visible():
                             text = await element.text_content()
                             if text and ("导出" in text or "下载" in text):
