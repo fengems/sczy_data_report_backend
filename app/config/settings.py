@@ -1,6 +1,7 @@
 """
 应用配置管理模块
 """
+
 from pathlib import Path
 from typing import Optional
 
@@ -27,17 +28,27 @@ class Settings(BaseSettings):
     # 浏览器配置
     browser_headless: bool = Field(default=False, description="无头浏览器模式")
     browser_timeout: int = Field(default=30000, description="浏览器超时时间(毫秒)")
-    browser_download_path: str = Field(default="./downloads", description="浏览器下载路径")
+    browser_download_path: str = Field(
+        default="./downloads", description="浏览器下载路径"
+    )
 
     # Redis配置
-    redis_url: str = Field(default="redis://localhost:6379/0", description="Redis连接URL")
+    redis_url: str = Field(
+        default="redis://localhost:6379/0", description="Redis连接URL"
+    )
 
     # Celery配置
-    celery_broker_url: str = Field(default="redis://localhost:6379/1", description="Celery代理URL")
-    celery_result_backend: str = Field(default="redis://localhost:6379/2", description="Celery结果后端")
+    celery_broker_url: str = Field(
+        default="redis://localhost:6379/1", description="Celery代理URL"
+    )
+    celery_result_backend: str = Field(
+        default="redis://localhost:6379/2", description="Celery结果后端"
+    )
 
     # 企业微信配置
-    wechat_webhook: Optional[str] = Field(default=None, description="企业微信Webhook地址")
+    wechat_webhook: Optional[str] = Field(
+        default=None, description="企业微信Webhook地址"
+    )
 
     # 文件存储配置
     upload_path: str = Field(default="./uploads", description="上传文件路径")

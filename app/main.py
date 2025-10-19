@@ -1,10 +1,11 @@
 """
 FastAPI main application
 """
-from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
+from typing import Any, AsyncGenerator, Dict
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -52,13 +53,15 @@ def create_app() -> FastAPI:
 
 def register_routes(app: FastAPI) -> None:
     """Register API routes"""
-    from app.api import health, crawler
+    from app.api import crawler, health
 
     app.include_router(health.router, prefix="/api/v1", tags=["Health Check"])
-    app.include_router(crawler.router, prefix="/api/v1/crawler", tags=["Crawler Management"])
+    app.include_router(
+        crawler.router, prefix="/api/v1/crawler", tags=["Crawler Management"]
+    )
 
     @app.get("/", tags=["Root"])
-    async def root():
+    async def root() -> Dict[str, Any]:
         return {
             "message": f"Welcome to {settings.app_name}",
             "version": settings.app_version,
@@ -71,7 +74,9 @@ def register_exception_handlers(app: FastAPI) -> None:
     """Register exception handlers"""
 
     @app.exception_handler(Exception)
-    async def global_exception_handler(request, exc):
+    async def global_exception_handler(
+        request: Request, exc: Exception
+    ) -> JSONResponse:
         """Global exception handler"""
         return JSONResponse(
             status_code=500,

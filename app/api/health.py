@@ -1,9 +1,11 @@
 """
 健康检查API
 """
+
 from datetime import datetime
-from fastapi import APIRouter, Depends
-from typing import Dict, Any
+from typing import Any, Dict
+
+from fastapi import APIRouter
 
 from app.utils.logger import get_logger
 
@@ -18,7 +20,7 @@ async def health_check() -> Dict[str, Any]:
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "service": "SCZY数据报告系统",
-        "version": "1.0.0"
+        "version": "1.0.0",
     }
 
 

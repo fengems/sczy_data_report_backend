@@ -2,8 +2,9 @@
 商品档案爬虫模块
 用于从ERP系统导出商品档案基础信息
 """
+
 import asyncio
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 from app.crawlers.base import BaseCrawler
 from app.crawlers.utils import wait_for_export_task
@@ -12,7 +13,7 @@ from app.crawlers.utils import wait_for_export_task
 class GoodsArchiveCrawler(BaseCrawler):
     """商品档案爬虫"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__("goods_archive")
         self.target_url = "/cc_sssp/superAdmin/viewCenter/v1/goods/list"
 
@@ -29,12 +30,15 @@ class GoodsArchiveCrawler(BaseCrawler):
 
         return await auth_crawler.login()
 
-    def _safe_page_method(self, method_name: str, *args, **kwargs):
+    async def _safe_page_method(
+        self, method_name: str, *args: Any, **kwargs: Any
+    ) -> Optional[Any]:
         """安全调用page方法"""
         if not self.page:
             return None
         try:
-            return getattr(self.page, method_name)(*args, **kwargs)
+            method = getattr(self.page, method_name)
+            return await method(*args, **kwargs)
         except Exception as e:
             self.logger.error(f"Error calling page.{method_name}: {e}")
             return None
@@ -59,7 +63,7 @@ class GoodsArchiveCrawler(BaseCrawler):
                 ".filter-button-wrap",
                 ".filter-operation-btn-wrap",
                 "[class*='filter'][class*='button']",
-                "[class*='filter'][class*='operation']"
+                "[class*='filter'][class*='operation']",
             ]
 
             # 直接并行查找所有可能的filter元素
@@ -67,12 +71,16 @@ class GoodsArchiveCrawler(BaseCrawler):
 
             for selector in filter_selectors:
                 try:
-                    element = await self._safe_page_method('wait_for_selector', selector, timeout=2000)
-                    if element and await element.is_visible():
-                        filter_element = element
-                        self.logger.info(f"找到filter部分，选择器: {selector}")
-                        break
-                except:
+                    element = await self._safe_page_method(
+                        "wait_for_selector", selector, timeout=2000
+                    )
+                    if element and hasattr(element, "is_visible"):
+                        is_visible = await element.is_visible()
+                        if is_visible:
+                            filter_element = element
+                            self.logger.info(f"找到filter部分，选择器: {selector}")
+                            break
+                except Exception:
                     continue
 
             # 如果快速查找失败，尝试备用方案
@@ -81,11 +89,13 @@ class GoodsArchiveCrawler(BaseCrawler):
                 # 直接查找导出按钮，减少遍历所有按钮的开销
                 try:
                     if self.page:
-                        export_button = await self.page.wait_for_selector("button:has-text('导出')", timeout=3000)
-                    if export_button and await export_button.is_visible():
-                        filter_element = export_button
-                        self.logger.info("直接找到导出按钮，作为filter区域")
-                except:
+                        export_button = await self.page.wait_for_selector(
+                            "button:has-text('导出')", timeout=3000
+                        )
+                        if export_button and await export_button.is_visible():
+                            filter_element = export_button
+                            self.logger.info("直接找到导出按钮，作为filter区域")
+                except Exception:
                     pass
 
             if not filter_element:
@@ -111,7 +121,7 @@ class GoodsArchiveCrawler(BaseCrawler):
                 "button:has-text('导出')",
                 ".export-btn",
                 "[class*='export']",
-                "button[title*='导出']"
+                "button[title*='导出']",
             ]
 
             export_button = None
@@ -119,10 +129,13 @@ class GoodsArchiveCrawler(BaseCrawler):
             for selector in export_selectors:
                 try:
                     # 如果在filter区域内查找
-                    if filter_element and hasattr(filter_element, 'query_selector'):
+                    if filter_element and hasattr(filter_element, "query_selector"):
                         button = await filter_element.query_selector(selector)
                     else:
-                        button = await self.page.wait_for_selector(selector, timeout=5000)
+                        if self.page:
+                            button = await self.page.wait_for_selector(
+                                selector, timeout=5000
+                            )
 
                     if button:
                         # 验证按钮文本
@@ -133,24 +146,25 @@ class GoodsArchiveCrawler(BaseCrawler):
                                 export_button = button
                                 self.logger.info(f"找到导出按钮，选择器: {selector}")
                                 break
-                except:
+                except Exception:
                     continue
 
             # 备用方案：查找所有按钮，筛选文本内容
             if not export_button:
                 self.logger.info("使用备用方案定位导出按钮...")
-                all_buttons = await self.page.query_selector_all("button")
-                for button in all_buttons:
-                    try:
-                        text = await button.text_content()
-                        if text and text.strip().replace(" ", "") == "导出":
-                            is_visible = await button.is_visible()
-                            if is_visible:
-                                export_button = button
-                                self.logger.info("通过文本匹配找到导出按钮")
-                                break
-                    except:
-                        continue
+                if self.page:
+                    all_buttons = await self.page.query_selector_all("button")
+                    for button in all_buttons:
+                        try:
+                            text = await button.text_content()
+                            if text and text.strip().replace(" ", "") == "导出":
+                                is_visible = await button.is_visible()
+                                if is_visible:
+                                    export_button = button
+                                    self.logger.info("通过文本匹配找到导出按钮")
+                                    break
+                        except Exception:
+                            continue
 
             if not export_button:
                 raise RuntimeError("无法找到导出按钮")
@@ -180,14 +194,14 @@ class GoodsArchiveCrawler(BaseCrawler):
 
             # 优先直接查找目标元素，而不是先找dropdown容器
             try:
-                target_element = await self.page.wait_for_selector(
-                    "text='基础信息导出'",
-                    timeout=3000
-                )
-                if target_element and await target_element.is_visible():
-                    self.logger.info("直接找到目标元素，无需查找dropdown容器")
-                    return target_element  # 直接返回目标元素
-            except:
+                if self.page:
+                    target_element = await self.page.wait_for_selector(
+                        "text='基础信息导出'", timeout=3000
+                    )
+                    if target_element and await target_element.is_visible():
+                        self.logger.info("直接找到目标元素，无需查找dropdown容器")
+                        return target_element  # 直接返回目标元素
+            except Exception:
                 pass
 
             # 如果直接查找失败，再尝试查找dropdown容器
@@ -197,19 +211,22 @@ class GoodsArchiveCrawler(BaseCrawler):
                 ".ivu-dropdown-menu",
                 "[class*='dropdown']",
                 "[class*='select-dropdown']",
-                ".ivu-dropdown-drop"
+                ".ivu-dropdown-drop",
             ]
 
             dropdown_element = None
 
             for selector in dropdown_selectors:
                 try:
-                    element = await self.page.wait_for_selector(selector, timeout=2000)
-                    if element and await element.is_visible():
-                        dropdown_element = element
-                        self.logger.info(f"找到dropdown元素，选择器: {selector}")
-                        break
-                except:
+                    if self.page:
+                        element = await self.page.wait_for_selector(
+                            selector, timeout=2000
+                        )
+                        if element and await element.is_visible():
+                            dropdown_element = element
+                            self.logger.info(f"找到dropdown元素，选择器: {selector}")
+                            break
+                except Exception:
                     continue
 
             if not dropdown_element:
@@ -234,51 +251,56 @@ class GoodsArchiveCrawler(BaseCrawler):
             self.logger.info("开始定位dropdown-item...")
 
             # 如果上一步已经直接返回了目标元素，直接使用
-            if dropdown_element and hasattr(dropdown_element, 'text_content'):
+            if dropdown_element and hasattr(dropdown_element, "text_content"):
                 try:
                     text = await dropdown_element.text_content()
                     if text and "基础信息导出" in text.strip():
                         self.logger.info("使用上一步找到的目标元素")
                         return dropdown_element
-                except:
+                except Exception:
                     pass
 
             # 优先方案：直接文本查找，最快最准
             try:
-                target_element = await self.page.wait_for_selector(
-                    "text='基础信息导出'",
-                    timeout=3000
-                )
-                if target_element and await target_element.is_visible():
-                    self.logger.info("直接找到'基础信息导出'元素")
-                    return target_element
-            except:
+                if self.page:
+                    target_element = await self.page.wait_for_selector(
+                        "text='基础信息导出'", timeout=3000
+                    )
+                    if target_element and await target_element.is_visible():
+                        self.logger.info("直接找到'基础信息导出'元素")
+                        return target_element
+            except Exception:
                 self.logger.info("直接查找失败，尝试备用方案...")
 
             # 简化的备用方案：只在dropdown_element内查找，避免全局搜索
-            if dropdown_element and hasattr(dropdown_element, 'query_selector'):
+            if dropdown_element and hasattr(dropdown_element, "query_selector"):
                 try:
-                    item = await dropdown_element.query_selector("li:has-text('基础信息导出')")
+                    item = await dropdown_element.query_selector(
+                        "li:has-text('基础信息导出')"
+                    )
                     if item and await item.is_visible():
                         self.logger.info("在dropdown容器内找到目标元素")
                         return item
-                except:
+                except Exception:
                     pass
 
             # 最终备用方案：快速全局查找，限制选择器数量
             quick_selectors = [
                 "li:has-text('基础信息导出')",
                 ".ivu-dropdown-item:has-text('基础信息导出')",
-                "[class*='dropdown-item']:has-text('基础信息导出')"
+                "[class*='dropdown-item']:has-text('基础信息导出')",
             ]
 
             for selector in quick_selectors:
                 try:
-                    element = await self.page.wait_for_selector(selector, timeout=2000)
-                    if element and await element.is_visible():
-                        self.logger.info(f"通过选择器 {selector} 找到目标元素")
-                        return element
-                except:
+                    if self.page:
+                        element = await self.page.wait_for_selector(
+                            selector, timeout=2000
+                        )
+                        if element and await element.is_visible():
+                            self.logger.info(f"通过选择器 {selector} 找到目标元素")
+                            return element
+                except Exception:
                     continue
 
             raise RuntimeError("无法找到'基础信息导出'dropdown-item")
@@ -329,19 +351,20 @@ class GoodsArchiveCrawler(BaseCrawler):
             "[class*='popup']",
             "[class*='dialog']",
             ".el-dialog",
-            ".el-message-box"
+            ".el-message-box",
         ]
 
         for selector in modal_selectors:
             try:
                 # 增加等待时间，给modal更多出现时间
-                elements = await self.page.query_selector_all(selector)
-                for element in elements:
-                    is_visible = await element.is_visible()
-                    if is_visible:
-                        self.logger.info(f"找到modal弹窗，选择器: {selector}")
-                        return element
-            except:
+                if self.page:
+                    elements = await self.page.query_selector_all(selector)
+                    for element in elements:
+                        is_visible = await element.is_visible()
+                        if is_visible:
+                            self.logger.info(f"找到modal弹窗，选择器: {selector}")
+                            return element
+            except Exception:
                 continue
 
         return None
@@ -353,13 +376,13 @@ class GoodsArchiveCrawler(BaseCrawler):
             "button:has-text('确认导出')",  # 最具体的选择器
             "button:has-text('确认')",
             ".ivu-btn-primary:has-text('确认')",
-            ".btn-primary:has-text('确认')"
+            ".btn-primary:has-text('确认')",
         ]
 
         confirm_button = None
 
         # 快速查找确认按钮，优先在modal内查找
-        if hasattr(modal_element, 'query_selector'):
+        if hasattr(modal_element, "query_selector"):
             for selector in confirm_selectors:
                 try:
                     button = await modal_element.query_selector(selector)
@@ -368,20 +391,23 @@ class GoodsArchiveCrawler(BaseCrawler):
                         text = await button.text_content()
                         self.logger.info(f"在modal内找到确认按钮: '{text}'")
                         break
-                except:
+                except Exception:
                     continue
 
         # 如果modal内没找到，快速全局查找
         if not confirm_button:
             for selector in confirm_selectors:
                 try:
-                    button = await self.page.wait_for_selector(selector, timeout=2000)
-                    if button and await button.is_visible():
-                        confirm_button = button
-                        text = await button.text_content()
-                        self.logger.info(f"全局找到确认按钮: '{text}'")
-                        break
-                except:
+                    if self.page:
+                        button = await self.page.wait_for_selector(
+                            selector, timeout=2000
+                        )
+                        if button and await button.is_visible():
+                            confirm_button = button
+                            text = await button.text_content()
+                            self.logger.info(f"全局找到确认按钮: '{text}'")
+                            break
+                except Exception:
                     continue
 
         if confirm_button:
@@ -409,18 +435,19 @@ class GoodsArchiveCrawler(BaseCrawler):
                 "[class*='notice']",
                 "[class*='toast']",
                 ".el-message",
-                ".el-notification"
+                ".el-notification",
             ]
 
             for indicator in download_indicators:
-                elements = await self.page.query_selector_all(indicator)
-                for element in elements:
-                    if await element.is_visible():
-                        text = await element.text_content()
-                        if text and ("导出" in text or "下载" in text):
-                            self.logger.info(f"发现下载提示: {text}")
-                            return True
-        except:
+                if self.page:
+                    elements = await self.page.query_selector_all(indicator)
+                    for element in elements:
+                        if await element.is_visible():
+                            text = await element.text_content()
+                            if text and ("导出" in text or "下载" in text):
+                                self.logger.info(f"发现下载提示: {text}")
+                                return True
+        except Exception:
             pass
 
         # 即使没有找到任何提示，也认为可能正在后台下载
@@ -434,6 +461,8 @@ class GoodsArchiveCrawler(BaseCrawler):
         try:
             # 导航到商品档案页面
             self.logger.info(f"导航到商品档案页面: {self.target_url}")
+            # 暂时忽略参数，将来可以用于配置导出选项
+            _ = params  # 标记参数已被考虑但未使用
             await self.navigate_to(self.target_url)
 
             # 执行导出流程
@@ -443,8 +472,9 @@ class GoodsArchiveCrawler(BaseCrawler):
             dropdown_item = await self.find_dropdown_item(dropdown_element)
 
             # 点击dropdown-item
-            await dropdown_item.click()
-            self.logger.info("已点击'基础信息导出'dropdown-item")
+            if dropdown_item:
+                await dropdown_item.click()
+                self.logger.info("已点击'基础信息导出'dropdown-item")
 
             # 处理导出modal
             await self.handle_export_modal()
@@ -455,7 +485,7 @@ class GoodsArchiveCrawler(BaseCrawler):
                 page=self.page,
                 filename="商品档案基础信息",  # 可选的自定义文件名
                 timeout=300,  # 等待5分钟
-                use_task_center=True  # 使用任务中心模式（适用于大文件导出）
+                use_task_center=True,  # 使用任务中心模式（适用于大文件导出）
             )
 
             self.logger.info(f"商品档案导出完成，文件保存路径: {download_path}")

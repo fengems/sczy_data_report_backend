@@ -5,7 +5,4 @@
 
 from .task_center import TaskCenterUtils, wait_for_export_task
 
-__all__ = [
-    "TaskCenterUtils",
-    "wait_for_export_task"
-]
+__all__ = ["TaskCenterUtils", "wait_for_export_task"]

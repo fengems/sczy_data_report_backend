@@ -2,11 +2,10 @@
 任务中心工具模块
 用于处理ERP系统中的大文件导出任务
 """
+
 import asyncio
-import json
-from typing import Optional, Any
 from pathlib import Path
-from urllib.parse import urlparse
+from typing import Any, Optional
 
 from app.utils.logger import get_logger
 
@@ -19,7 +18,12 @@ class TaskCenterUtils:
         self.logger = get_logger("task_center")
         self._temp_url = None  # 临时存储下载URL
 
-    async def wait_for_export_task(self, filename: Optional[str] = None, timeout: int = 300, use_task_center: bool = True) -> str:
+    async def wait_for_export_task(
+        self,
+        filename: Optional[str] = None,
+        timeout: int = 300,
+        use_task_center: bool = True,
+    ) -> str:
         """
         等待导出任务完成并下载文件
 
@@ -61,11 +65,13 @@ class TaskCenterUtils:
 
             # 检查是否已经有抽屉显示
             try:
-                existing_drawer = await self.page.wait_for_selector(".task-drawer", timeout=3000)
+                existing_drawer = await self.page.wait_for_selector(
+                    ".task-drawer", timeout=3000
+                )
                 if existing_drawer and await existing_drawer.is_visible():
                     self.logger.info("任务中心抽屉已自动弹出")
                     return existing_drawer
-            except:
+            except Exception:
                 pass
 
             # 如果没有自动弹出，手动点击任务按钮
@@ -77,22 +83,26 @@ class TaskCenterUtils:
                 ".task-btn:has-text('任务中心')",
                 "[class*='task-btn']:has-text('任务')",
                 "button:has-text('任务')",
-                "[class*='task']:has-text('任务')"
+                "[class*='task']:has-text('任务')",
             ]
 
             task_button = None
             for selector in task_selectors:
                 try:
-                    task_button = await self.page.wait_for_selector(selector, timeout=5000)
+                    task_button = await self.page.wait_for_selector(
+                        selector, timeout=5000
+                    )
                     if task_button and await task_button.is_visible():
                         self.logger.info(f"找到任务按钮，选择器: {selector}")
                         break
-                except:
+                except Exception:
                     continue
 
             if not task_button:
                 # 备用方案：查找所有按钮，寻找包含"任务"文本的
-                all_buttons = await self.page.query_selector_all("button, [class*='btn'], [role='button']")
+                all_buttons = await self.page.query_selector_all(
+                    "button, [class*='btn'], [role='button']"
+                )
                 for button in all_buttons:
                     try:
                         text = await button.text_content()
@@ -102,7 +112,7 @@ class TaskCenterUtils:
                                 task_button = button
                                 self.logger.info("通过文本匹配找到任务按钮")
                                 break
-                    except:
+                    except Exception:
                         continue
 
             if not task_button:
@@ -127,7 +137,9 @@ class TaskCenterUtils:
             self.logger.error(f"打开任务中心抽屉失败: {str(e)}")
             raise
 
-    async def _wait_for_direct_download(self, filename: Optional[str], timeout: int) -> str:
+    async def _wait_for_direct_download(
+        self, filename: Optional[str], timeout: int
+    ) -> str:
         """
         直接等待文件下载（适用于不弹出任务中心的导出）
 
@@ -172,7 +184,9 @@ class TaskCenterUtils:
             self.logger.error(f"直接下载失败: {str(e)}")
             raise
 
-    async def _wait_by_page_elements(self, task_drawer: Any, filename: Optional[str], timeout: int) -> str:
+    async def _wait_by_page_elements(
+        self, task_drawer: Any, filename: Optional[str], timeout: int
+    ) -> str:
         """
         通过页面元素监听任务状态并点击下载
 
@@ -188,7 +202,9 @@ class TaskCenterUtils:
             self.logger.info("监听任务中心状态，等待任务完成...")
 
             # 查找任务列表
-            task_list = await task_drawer.wait_for_selector(".task-drawer-list", timeout=10000)
+            task_list = await task_drawer.wait_for_selector(
+                ".task-drawer-list", timeout=10000
+            )
             if not task_list:
                 raise RuntimeError("未找到任务列表")
 
@@ -197,14 +213,18 @@ class TaskCenterUtils:
             while asyncio.get_event_loop().time() - start_time < timeout:
                 try:
                     # 获取第一个任务项
-                    first_item = await task_list.wait_for_selector(".items", timeout=5000)
+                    first_item = await task_list.wait_for_selector(
+                        ".items", timeout=5000
+                    )
                     if not first_item:
                         self.logger.debug("未找到任务项，等待3秒...")
                         await asyncio.sleep(3)
                         continue
 
                     # 查找图标元素
-                    icons_element = await first_item.wait_for_selector("div.icons", timeout=3000)
+                    icons_element = await first_item.wait_for_selector(
+                        "div.icons", timeout=3000
+                    )
                     if not icons_element:
                         self.logger.debug("未找到图标元素，等待3秒...")
                         await asyncio.sleep(3)
@@ -236,7 +256,9 @@ class TaskCenterUtils:
             self.logger.error(f"任务中心监听失败: {str(e)}")
             raise
 
-    async def _click_and_download(self, download_element: Any, filename: Optional[str]) -> str:
+    async def _click_and_download(
+        self, download_element: Any, filename: Optional[str]
+    ) -> str:
         """
         点击下载元素并处理文件下载
 
@@ -285,9 +307,13 @@ class TaskCenterUtils:
             self.logger.error(f"点击下载失败: {str(e)}")
             raise
 
-    
 
-async def wait_for_export_task(page: Any, filename: Optional[str] = None, timeout: int = 300, use_task_center: bool = True) -> str:
+async def wait_for_export_task(
+    page: Any,
+    filename: Optional[str] = None,
+    timeout: int = 300,
+    use_task_center: bool = True,
+) -> str:
     """
     便捷函数：等待导出任务完成并下载文件
 

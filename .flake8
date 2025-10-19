@@ -1,0 +1,24 @@
+[flake8]
+max-line-length = 88
+extend-ignore = E203, E266, E501, W503, F403, F401
+max-complexity = 18
+select = B, C, E, F, W, T4, B9
+exclude =
+    .git,
+    __pycache__,
+    .venv,
+    venv,
+    .eggs,
+    *.egg,
+    build,
+    dist,
+    migrations,
+    node_modules
+
+# 拓展忽略：
+# E203: whitespace before ':'
+# E266: too many '#' for block comment
+# E501: line too long (handled by black)
+# W503: line break before binary operator
+# F403: 'from module import *' used
+# F401: module imported but unused

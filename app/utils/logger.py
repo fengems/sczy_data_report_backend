@@ -1,8 +1,9 @@
 """
 日志配置模块
 """
+
 import sys
-from pathlib import Path
+from typing import Any, Optional
 
 from loguru import logger
 
@@ -33,7 +34,10 @@ def setup_logger() -> None:
     # 添加文件处理器
     logger.add(
         settings.log_file,
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} | {message}",
+        format=(
+            "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | "
+            "{name}:{function}:{line} | {message}"
+        ),
         level=settings.log_level,
         rotation="10 MB",
         retention="30 days",
@@ -44,7 +48,7 @@ def setup_logger() -> None:
     logger.info("Logger initialized successfully")
 
 
-def get_logger(name: str = None):
+def get_logger(name: Optional[str] = None) -> Any:
     """获取logger实例"""
     if name:
         return logger.bind(name=name)

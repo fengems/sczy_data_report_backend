@@ -1,13 +1,14 @@
 """
 Base crawler class
 """
+
 import asyncio
 from abc import ABC, abstractmethod
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
-from contextlib import asynccontextmanager
 
-from playwright.async_api import Page, Browser, BrowserContext, async_playwright
+from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
 from app.config.settings import settings
 from app.utils.logger import get_logger
@@ -25,7 +26,7 @@ class BaseCrawler(ABC):
         self.is_logged_in = False
 
     @asynccontextmanager
-    async def browser_session(self):
+    async def browser_session(self) -> Any:
         """Browser session context manager"""
         try:
             await self._init_browser()
@@ -33,25 +34,31 @@ class BaseCrawler(ABC):
         finally:
             await self._cleanup_browser()
 
-    async def _init_browser(self, context_options: Optional[Dict[str, Any]] = None) -> None:
+    async def _init_browser(
+        self, context_options: Optional[Dict[str, Any]] = None
+    ) -> None:
         """Initialize browser
 
         Args:
             context_options: Optional context configuration. If None, uses default settings.
-                           Example: {"viewport": {"width": 1920, "height": 1080}, "user_agent": "..."}
+                Example: {"viewport": {"width": 1920, "height": 1080},
+                           "user_agent": "..."}
         """
         if not self.browser:
             playwright = await async_playwright().start()
             self.browser = await playwright.chromium.launch(
                 headless=settings.browser_headless,
                 args=[],  # 使用默认参数，不添加任何特殊配置
-                channel="chrome"  # 使用Chrome浏览器
+                channel="chrome",  # 使用Chrome浏览器
             )
 
-            # Create browser context - use default settings unless specific options provided
+            # Create browser context - use default settings unless specific options
+            # provided
             if context_options:
                 self.context = await self.browser.new_context(**context_options)
-                self.logger.info(f"Browser context created with custom options: {context_options}")
+                self.logger.info(
+                    f"Browser context created with custom options: {context_options}"
+                )
             else:
                 self.context = await self.browser.new_context()  # Use all defaults
                 self.logger.info("Browser context created with default settings")
@@ -61,9 +68,9 @@ class BaseCrawler(ABC):
 
             # Set download path
             if self.page and self.page.context:
-                await self.page.context.set_extra_http_headers({
-                    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"
-                })
+                await self.page.context.set_extra_http_headers(
+                    {"Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"}
+                )
 
             self.logger.info("Browser initialized successfully")
 
@@ -92,7 +99,8 @@ class BaseCrawler(ABC):
         try:
             # 添加一些JavaScript代码，方便调试
             if self.page:
-                await self.page.add_init_script("""
+                await self.page.add_init_script(
+                    """
                 // 添加全局调试函数
                 window.debugScroll = function(x = 0, y = 0) {
                     window.scrollTo(x, y);
@@ -128,8 +136,12 @@ class BaseCrawler(ABC):
                     return null;
                 };
 
-                console.log('Debug functions loaded. Use debugScroll(), debugInfo(), debugHighlight()');
-            """)
+                console.log(
+                    'Debug functions loaded. Use debugScroll(), debugInfo(), '
+                    'debugHighlight()'
+                );
+            """
+                )
 
             self.logger.info("Debug features enabled")
         except Exception as e:
@@ -153,12 +165,14 @@ class BaseCrawler(ABC):
             return {"width": 0, "height": 0}
 
         try:
-            size = await self.page.evaluate("""
+            size = await self.page.evaluate(
+                """
                 return {
                     width: window.innerWidth,
                     height: window.innerHeight
                 }
-            """)
+            """
+            )
             return size
         except Exception as e:
             self.logger.error(f"Failed to get window size: {str(e)}")
@@ -247,7 +261,9 @@ class BaseCrawler(ABC):
             download = await download_promise
 
             # Save file to specified path
-            download_path = Path(settings.browser_download_path) / download.suggested_filename
+            download_path = (
+                Path(settings.browser_download_path) / download.suggested_filename
+            )
             await download.save_as(download_path)
 
             self.logger.info(f"File downloaded: {download_path}")
@@ -278,7 +294,9 @@ class BaseCrawler(ABC):
         try:
             # 检查当前URL是否为目标URL
             current_url = self.page.url
-            target_url = "https://scm.sdongpo.com/cc_sssp/superAdmin/viewCenter/v1/index"
+            target_url = (
+                "https://scm.sdongpo.com/cc_sssp/superAdmin/viewCenter/v1/index"
+            )
 
             if current_url == target_url:
                 self.logger.info(f"Login status confirmed: at target URL {current_url}")
@@ -286,7 +304,10 @@ class BaseCrawler(ABC):
 
             # 检查URL是否包含目标路径的特征
             if "/v1/index" in current_url and "viewCenter" in current_url:
-                self.logger.info(f"Login status confirmed: URL contains target patterns {current_url}")
+                self.logger.info(
+                    f"Login status confirmed: URL contains target patterns "
+                    f"{current_url}"
+                )
                 return True
 
             self.logger.info(f"Not logged in yet: current URL {current_url}")
@@ -306,7 +327,9 @@ class BaseCrawler(ABC):
         """Crawl data - must be implemented by subclasses"""
         pass
 
-    async def run(self, params: Optional[Dict[str, Any]] = None) -> Union[str, Dict[str, Any]]:
+    async def run(
+        self, params: Optional[Dict[str, Any]] = None
+    ) -> Union[str, Dict[str, Any]]:
         """Run complete crawler workflow"""
         if params is None:
             params = {}
