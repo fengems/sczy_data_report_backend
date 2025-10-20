@@ -393,7 +393,7 @@ class GoodsArchiveCrawler(BaseCrawler):
                     if await button.count() > 0 and await button.is_visible():
                         confirm_button = button
                         text = await button.text_content()
-                        self.logger.info(f"在modal内找到确认按钮: '{text}'")
+                        self.logger.info(f"在modal内找到确认按钮: '{text if text else ''}'")
                         break
                 except Exception:
                     continue
@@ -409,7 +409,7 @@ class GoodsArchiveCrawler(BaseCrawler):
                         if button and await button.is_visible():
                             confirm_button = button
                             text = await button.text_content()
-                            self.logger.info(f"全局找到确认按钮: '{text}'")
+                            self.logger.info(f"全局找到确认按钮: '{text if text else ''}'")
                             break
                 except Exception:
                     continue
@@ -451,7 +451,7 @@ class GoodsArchiveCrawler(BaseCrawler):
                         if await element.is_visible():
                             text = await element.text_content()
                             if text and ("导出" in text or "下载" in text):
-                                self.logger.info(f"发现下载提示: {text}")
+                                self.logger.info(f"发现下载提示: {text if text else ''}")
                                 return True
         except Exception:
             pass
