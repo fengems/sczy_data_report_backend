@@ -4,22 +4,25 @@
 测试 app/processors/fresh_food_ratio.py 的完整功能
 """
 
-import pytest
-import sys
-import pandas as pd
-import tempfile
-import shutil
-from pathlib import Path
-from datetime import datetime
 import logging
+import sys
+import tempfile
+from pathlib import Path
+
+import pytest
+import pandas as pd
 
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from app.processors.fresh_food_ratio import FreshFoodRatioService, process_fresh_food_ratio, 函数
-from app.processors.excel_processor import FreshFoodRatioProcessor
 from app.outputs.excel_writer import ExcelReportWriter
+from app.processors.excel_processor import FreshFoodRatioProcessor
+from app.processors.fresh_food_ratio import (
+    FreshFoodRatioService,
+    process_fresh_food_ratio,
+    函数,
+)
 from app.utils.logger import get_logger
 
 # 设置测试日志
@@ -28,8 +31,8 @@ logging.basicConfig(level=logging.INFO)
 
 # 测试数据路径
 TEST_DATA_DIR = project_root / "test_data"
-LAST_MONTH_FILE = TEST_DATA_DIR / "2024年9月订单数据.xlsx"
-THIS_MONTH_FILE = TEST_DATA_DIR / "2024年10月订单数据.xlsx"
+LAST_MONTH_FILE = TEST_DATA_DIR / "订单导出_9月.xlsx"
+THIS_MONTH_FILE = TEST_DATA_DIR / "订单导出_10月至今.xlsx"
 
 
 class TestFreshFoodRatioProcessor:
@@ -51,23 +54,25 @@ class TestFreshFoodRatioProcessor:
     def test_init(self, processor):
         """测试处理器初始化"""
         assert processor is not None
-        assert hasattr(processor, 'required_columns')
-        assert '客户名称' in processor.required_columns
-        assert '业务员' in processor.required_columns
-        assert '发货时间' in processor.required_columns
-        assert '实际金额' in processor.required_columns
-        assert '一级分类' in processor.required_columns
+        assert hasattr(processor, "required_columns")
+        assert "客户名称" in processor.required_columns
+        assert "业务员" in processor.required_columns
+        assert "发货时间" in processor.required_columns
+        assert "实际金额" in processor.required_columns
+        assert "一级分类" in processor.required_columns
 
     def test_validate_columns_success(self, processor):
         """测试列验证成功情况"""
         # 创建包含所有必要列的DataFrame
-        df = pd.DataFrame({
-            '客户名称': ['客户A'],
-            '业务员': ['业务员甲'],
-            '发货时间': ['2024-10-01'],
-            '实际金额': [1000],
-            '一级分类': ['新鲜蔬菜']
-        })
+        df = pd.DataFrame(
+            {
+                "客户名称": ["客户A"],
+                "业务员": ["业务员甲"],
+                "发货时间": ["2024-10-01"],
+                "实际金额": [1000],
+                "一级分类": ["新鲜蔬菜"],
+            }
+        )
 
         result = processor.validate_columns(df, "test_file.xlsx")
         assert result is True
@@ -75,27 +80,29 @@ class TestFreshFoodRatioProcessor:
     def test_validate_columns_failure(self, processor):
         """测试列验证失败情况"""
         # 创建缺少必要列的DataFrame
-        df = pd.DataFrame({
-            '客户名称': ['客户A'],
-            '业务员': ['业务员甲']
-            # 缺少其他必要列
-        })
+        df = pd.DataFrame(
+            {
+                "客户名称": ["客户A"],
+                "业务员": ["业务员甲"],
+                # 缺少其他必要列
+            }
+        )
 
         result = processor.validate_columns(df, "test_file.xlsx")
         assert result is False
 
     def test_read_excel_file_success(self, processor, test_data):
         """测试成功读取Excel文件"""
-        last_month_file, this_month_file = test_data
+        last_month_file, _ = test_data
 
         # 测试读取文件
         df = processor.read_excel_file(last_month_file)
 
         assert isinstance(df, pd.DataFrame)
         assert len(df) > 0
-        assert '客户名称' in df.columns
-        assert '发货时间' in df.columns
-        assert df['发货时间'].dtype.kind in ['M', 'm']  # 检查是否为datetime类型
+        assert "客户名称" in df.columns
+        assert "发货时间" in df.columns
+        assert df["发货时间"].dtype.kind in ["M", "m"]  # 检查是否为datetime类型
 
     def test_read_excel_file_failure(self, processor):
         """测试读取不存在的文件"""
@@ -114,9 +121,9 @@ class TestFreshFoodRatioProcessor:
         merged = processor.merge_order_data(last_df, this_df)
 
         assert isinstance(merged, pd.DataFrame)
-        assert '月份' in merged.columns
+        assert "月份" in merged.columns
         assert len(merged) == len(last_df) + len(this_df)
-        assert set(merged['月份'].unique()) == {'上月', '本月'}
+        assert set(merged["月份"].unique()) == {"上月", "本月"}
 
     def test_calculate_order_days(self, processor, test_data):
         """测试计算下单天数"""
@@ -148,9 +155,9 @@ class TestFreshFoodRatioProcessor:
         pivot = processor.create_pivot_table_base(merged)
 
         assert isinstance(pivot, pd.DataFrame)
-        assert '客户名称' in pivot.columns
-        assert '业务员' in pivot.columns
-        assert '订单数量' in pivot.columns
+        assert "客户名称" in pivot.columns
+        assert "业务员" in pivot.columns
+        assert "订单数量" in pivot.columns
         assert len(pivot) > 0
 
     def test_calculate_sales_data(self, processor, test_data):
@@ -163,14 +170,14 @@ class TestFreshFoodRatioProcessor:
         merged = processor.merge_order_data(last_df, this_df)
 
         # 计算蔬菜销售数据
-        veg_last, veg_this = processor.calculate_sales_data(merged, '新鲜蔬菜')
+        veg_last, veg_this = processor.calculate_sales_data(merged, "新鲜蔬菜")
 
         assert isinstance(veg_last, pd.DataFrame)
         assert isinstance(veg_this, pd.DataFrame)
-        assert '客户名称' in veg_last.columns
-        assert '客户名称' in veg_this.columns
-        assert '上月新鲜蔬菜销售额' in veg_last.columns
-        assert '本月新鲜蔬菜销售额' in veg_this.columns
+        assert "客户名称" in veg_last.columns
+        assert "客户名称" in veg_this.columns
+        assert "上月新鲜蔬菜销售额" in veg_last.columns
+        assert "本月新鲜蔬菜销售额" in veg_this.columns
 
     def test_calculate_ratio(self, processor):
         """测试环比计算"""
@@ -198,19 +205,31 @@ class TestFreshFoodRatioProcessor:
 
         # 检查必要的列是否存在
         required_columns = [
-            '客户名称', '业务员', '订单数量',
-            '本月总日活', '上月总日活', '总日活环比',
-            '本月新鲜蔬菜销售额', '上月新鲜蔬菜销售额', '蔬菜销售额环比',
-            '本月鲜肉类销售额', '上月鲜肉类销售额', '鲜肉销售额环比',
-            '本月豆制品销售额', '上月豆制品销售额', '豆制品销售额环比',
-            '本月生鲜销售额', '上月生鲜销售额', '生鲜销售额环比'
+            "客户名称",
+            "业务员",
+            "订单数量",
+            "本月总日活",
+            "上月总日活",
+            "总日活环比",
+            "本月新鲜蔬菜销售额",
+            "上月新鲜蔬菜销售额",
+            "蔬菜销售额环比",
+            "本月鲜肉类销售额",
+            "上月鲜肉类销售额",
+            "鲜肉销售额环比",
+            "本月豆制品销售额",
+            "上月豆制品销售额",
+            "豆制品销售额环比",
+            "本月生鲜销售额",
+            "上月生鲜销售额",
+            "生鲜销售额环比",
         ]
 
         for col in required_columns:
             assert col in result.columns, f"缺少列: {col}"
 
         # 验证数据类型和值的合理性
-        assert (result['生鲜销售额环比'].dtype == float)
+        assert result["生鲜销售额环比"].dtype == float
         # 注意：由于透视表按客户名称和业务员分组，同一客户可能有多条记录
         logger.info(f"结果数据行数: {len(result)}")
         logger.info(f"唯一客户数: {len(result['客户名称'].unique())}")
@@ -236,8 +255,8 @@ class TestFreshFoodRatioService:
     def test_init(self, service):
         """测试服务初始化"""
         assert service is not None
-        assert hasattr(service, 'processor')
-        assert hasattr(service, 'writer')
+        assert hasattr(service, "processor")
+        assert hasattr(service, "writer")
         assert isinstance(service.processor, FreshFoodRatioProcessor)
         assert isinstance(service.writer, ExcelReportWriter)
 
@@ -255,7 +274,7 @@ class TestFreshFoodRatioService:
 
     def test_validate_input_files_wrong_format(self, service, test_data):
         """测试验证错误格式的文件"""
-        last_month_file, this_month_file = test_data
+        last_month_file, _ = test_data
 
         # 创建临时文件但格式错误
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -275,9 +294,7 @@ class TestFreshFoodRatioService:
 
             # 执行处理流程
             result_df, result_path = service.process_fresh_food_ratio(
-                last_month_file,
-                this_month_file,
-                str(output_file)
+                last_month_file, this_month_file, str(output_file)
             )
 
             # 验证结果
@@ -288,8 +305,8 @@ class TestFreshFoodRatioService:
 
             # 验证输出Excel文件内容
             with pd.ExcelFile(result_path) as xls:
-                assert '客户环比' in xls.sheet_names
-                assert '数据摘要' in xls.sheet_names
+                assert "客户环比" in xls.sheet_names
+                assert "数据摘要" in xls.sheet_names
 
 
 class TestExcelReportWriter:
@@ -303,22 +320,24 @@ class TestExcelReportWriter:
     @pytest.fixture
     def sample_data(self):
         """创建示例数据"""
-        return pd.DataFrame({
-            '客户名称': ['客户A', '客户B', '客户C'],
-            '业务员': ['业务员甲', '业务员乙', '业务员丙'],
-            '订单数量': [10, 15, 8],
-            '本月总日活': [20, 25, 15],
-            '上月总日活': [18, 22, 12],
-            '总日活环比': [11.11, 13.64, 25.0],
-            '本月生鲜销售额': [5000, 6000, 3000],
-            '上月生鲜销售额': [4500, 5500, 2800],
-            '生鲜销售额环比': [11.11, 9.09, 7.14]
-        })
+        return pd.DataFrame(
+            {
+                "客户名称": ["客户A", "客户B", "客户C"],
+                "业务员": ["业务员甲", "业务员乙", "业务员丙"],
+                "订单数量": [10, 15, 8],
+                "本月总日活": [20, 25, 15],
+                "上月总日活": [18, 22, 12],
+                "总日活环比": [11.11, 13.64, 25.0],
+                "本月生鲜销售额": [5000, 6000, 3000],
+                "上月生鲜销售额": [4500, 5500, 2800],
+                "生鲜销售额环比": [11.11, 9.09, 7.14],
+            }
+        )
 
     def test_init(self, writer):
         """测试写入器初始化"""
         assert writer is not None
-        assert hasattr(writer, 'default_output_dir')
+        assert hasattr(writer, "default_output_dir")
         assert writer.default_output_dir.exists()
 
     def test_format_number(self, writer):
@@ -345,8 +364,7 @@ class TestExcelReportWriter:
 
             # 写入报告
             result_path = writer.write_fresh_food_ratio_report(
-                sample_data,
-                str(output_file)
+                sample_data, str(output_file)
             )
 
             # 验证文件存在
@@ -355,13 +373,13 @@ class TestExcelReportWriter:
 
             # 验证文件内容
             with pd.ExcelFile(result_path) as xls:
-                assert '客户环比' in xls.sheet_names
-                assert '数据摘要' in xls.sheet_names
+                assert "客户环比" in xls.sheet_names
+                assert "数据摘要" in xls.sheet_names
 
                 # 验证客户环比数据
-                customer_df = pd.read_excel(xls, sheet_name='客户环比')
+                customer_df = pd.read_excel(xls, sheet_name="客户环比")
                 assert len(customer_df) == len(sample_data)
-                assert '客户名称' in customer_df.columns
+                assert "客户名称" in customer_df.columns
 
 
 class TestConvenienceFunctions:
@@ -384,9 +402,7 @@ class TestConvenienceFunctions:
 
             # 调用便捷函数
             result_df, result_path = process_fresh_food_ratio(
-                last_month_file,
-                this_month_file,
-                str(output_file)
+                last_month_file, this_month_file, str(output_file)
             )
 
             assert isinstance(result_df, pd.DataFrame)
@@ -398,13 +414,8 @@ class TestConvenienceFunctions:
         last_month_file, this_month_file = test_data
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            output_file = Path(temp_dir) / "test_chinese.xlsx"
-
             # 调用中文函数
-            result_df, result_path = 函数(
-                last_month_file,
-                this_month_file
-            )
+            result_df, result_path = 函数(last_month_file, this_month_file)
 
             assert isinstance(result_df, pd.DataFrame)
             assert len(result_df) > 0
@@ -432,11 +443,13 @@ class TestErrorHandling:
         with tempfile.TemporaryDirectory() as temp_dir:
             # 创建缺少列的Excel文件
             incomplete_file = Path(temp_dir) / "incomplete.xlsx"
-            incomplete_data = pd.DataFrame({
-                '客户名称': ['客户A'],
-                '业务员': ['业务员甲']
-                # 缺少其他必要列
-            })
+            incomplete_data = pd.DataFrame(
+                {
+                    "客户名称": ["客户A"],
+                    "业务员": ["业务员甲"],
+                    # 缺少其他必要列
+                }
+            )
             incomplete_data.to_excel(incomplete_file, index=False)
 
             processor = FreshFoodRatioProcessor()
@@ -458,9 +471,7 @@ def test_integration_complete_workflow():
 
         # 执行完整流程
         result_df, result_path = process_fresh_food_ratio(
-            str(LAST_MONTH_FILE),
-            str(THIS_MONTH_FILE),
-            str(output_file)
+            str(LAST_MONTH_FILE), str(THIS_MONTH_FILE), str(output_file)
         )
 
         logger.info(f"集成测试完成，输出文件: {result_path}")
@@ -473,12 +484,12 @@ def test_integration_complete_workflow():
         # 验证输出文件内容
         with pd.ExcelFile(result_path) as xls:
             sheets = xls.sheet_names
-            assert '客户环比' in sheets
-            assert '数据摘要' in sheets
+            assert "客户环比" in sheets
+            assert "数据摘要" in sheets
 
             # 验证数据完整性
-            customer_data = pd.read_excel(xls, sheet_name='客户环比')
-            summary_data = pd.read_excel(xls, sheet_name='数据摘要')
+            customer_data = pd.read_excel(xls, sheet_name="客户环比")
+            summary_data = pd.read_excel(xls, sheet_name="数据摘要")
 
             assert len(customer_data) > 0
             assert len(summary_data) > 0
@@ -498,7 +509,7 @@ if __name__ == "__main__":
         print("请先运行: python test_data/create_test_data.py")
         sys.exit(1)
 
-    print(f"✅ 测试数据已准备:")
+    print("✅ 测试数据已准备:")
     print(f"   - 上月数据: {LAST_MONTH_FILE}")
     print(f"   - 本月数据: {THIS_MONTH_FILE}")
 
@@ -508,11 +519,13 @@ if __name__ == "__main__":
 
     # 运行特定测试
     test_file = __file__
-    exit_code = pytest.main([
-        "-v",  # 详细输出
-        test_file,
-        "--tb=short"  # 简短的错误追踪
-    ])
+    exit_code = pytest.main(
+        [
+            "-v",  # 详细输出
+            test_file,
+            "--tb=short",  # 简短的错误追踪
+        ]
+    )
 
     if exit_code == 0:
         print("\n🎉 所有测试通过！")

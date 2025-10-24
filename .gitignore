@@ -181,6 +181,8 @@ data/
 uploads/
 temp/
 cache/
+test_data/
+outputs/
 
 # Database files
 *.db
