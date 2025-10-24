@@ -67,8 +67,47 @@ class FreshFoodRatioProcessor:
         # 合并数据
         all_area = pd.concat([last_month_df, this_month_df], ignore_index=True)
 
+        # 1. 筛选：客户名称不为空
+        all_area = all_area.dropna(subset=['客户名称'])
+        all_area = all_area[all_area['客户名称'].str.strip() != '']
+
+        # 2. 排序：按发货时间降序（最新日期在前面）
+        all_area = all_area.sort_values('发货时间', ascending=False)
+
         logger.info(f"数据合并完成，共 {len(all_area)} 行数据")
+        logger.info(f"筛选排序后，客户数量: {len(all_area['客户名称'].unique())}")
         return all_area
+
+    def get_latest_salesman(self, all_area: pd.DataFrame, customers: pd.Series) -> pd.DataFrame:
+        """
+        使用类似XLOOKUP逻辑获取每个客户的最新业务员
+
+        Args:
+            all_area: 排序后的完整订单数据
+            customers: 客户名称列表
+
+        Returns:
+            包含客户名称和最新业务员的DataFrame
+        """
+        logger.info("正在获取客户最新业务员...")
+
+        latest_salesmen = []
+
+        for customer in customers:
+            # 找到该客户的所有记录
+            customer_records = all_area[all_area['客户名称'] == customer]
+
+            if not customer_records.empty:
+                # 获取最新的业务员（第一条记录，因为数据已按发货时间降序排序）
+                latest_salesman = customer_records.iloc[0]['业务员']
+                latest_salesmen.append({
+                    '客户名称': customer,
+                    '业务员': latest_salesman
+                })
+
+        salesman_df = pd.DataFrame(latest_salesmen)
+        logger.info(f"获取到 {len(salesman_df)} 个客户的最新业务员信息")
+        return salesman_df
 
     def calculate_order_days(self, all_area: pd.DataFrame) -> Tuple[int, int]:
         """计算上个月和本月的下单天数"""
@@ -85,20 +124,18 @@ class FreshFoodRatioProcessor:
         """创建基础透视表"""
         logger.info("正在创建基础透视表...")
 
-        # 基础透视表：客户名称 + 业务员
-        pivot_table = all_area.pivot_table(
-            index=['客户名称', '业务员'],
-            aggfunc='size',
-            fill_value=0
-        ).reset_index()
+        # 基础透视表：只使用客户名称作为行
+        unique_customers = all_area['客户名称'].unique()
+        pivot_table = pd.DataFrame({'客户名称': unique_customers})
 
-        # 重命名计数列
-        pivot_table = pivot_table.rename(columns={0: '订单数量'})
+        # 使用XLOOKUP逻辑获取最新业务员
+        latest_salesmen_df = self.get_latest_salesman(all_area, pivot_table['客户名称'])
+        pivot_table = pivot_table.merge(latest_salesmen_df, on='客户名称', how='left')
 
-        logger.info(f"基础透视表创建完成，共 {len(pivot_table)} 个客户")
+        logger.info(f"基础透视表创建完成，共 {len(pivot_table)} 个唯一客户")
         return pivot_table
 
-    def calculate_daily_active_data(self, all_area: pd.DataFrame, last_month_days: int, this_month_days: int) -> pd.DataFrame:
+    def calculate_daily_active_data(self, all_area: pd.DataFrame, last_month_days: int, this_month_days: int) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """计算日活数据"""
         logger.info("正在计算日活数据...")
 
@@ -166,6 +203,36 @@ class FreshFoodRatioProcessor:
                 result = result.merge(df, on='客户名称', how='left')
 
         return result
+
+    def _reorder_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        重新排列列的顺序，将环比列放在对应数据列后面
+
+        Args:
+            df: 原始DataFrame
+
+        Returns:
+            重新排列后的DataFrame
+        """
+        # 定义列的新顺序
+        column_order = [
+            '客户名称', '业务员',
+            '上月总日活', '本月总日活', '总日活环比',
+            '上月新鲜蔬菜销售额', '本月新鲜蔬菜销售额', '蔬菜销售额环比',
+            '上月鲜肉类销售额', '本月鲜肉类销售额', '鲜肉销售额环比',
+            '上月豆制品销售额', '本月豆制品销售额', '豆制品销售额环比',
+            '上月生鲜销售额', '本月生鲜销售额', '生鲜销售额环比'
+        ]
+
+        # 过滤出实际存在的列
+        existing_columns = [col for col in column_order if col in df.columns]
+
+        # 添加其他可能存在的列（不在预定义顺序中的）
+        other_columns = [col for col in df.columns if col not in existing_columns]
+
+        final_columns = existing_columns + other_columns
+
+        return df[final_columns]
 
     def get_customer_diff(self, last_month_order_file: str, this_month_order_file: str) -> pd.DataFrame:
         """
@@ -302,8 +369,17 @@ class FreshFoodRatioProcessor:
             # 12. 填充空值为0
             result = result.fillna(0)
 
-            # 13. 按生鲜销售额降序排列
+            # 13. 重新排列列的顺序，将环比列放在对应数据列后面
+            result = self._reorder_columns(result)
+
+            # 14. 按生鲜销售额降序排列
             result = result.sort_values('本月生鲜销售额', ascending=False)
+
+            # 15. 添加最新日期信息用于Excel表头
+            if not all_area.empty:
+                latest_date = all_area['发货时间'].max().day
+                result.latest_date = latest_date
+                logger.info(f"数据最新日期: {latest_date}日")
 
             logger.info(f"客户环比数据处理完成，共 {len(result)} 个客户")
             return result

@@ -4,11 +4,10 @@ Excel文件写入器模块
 """
 
 import pandas as pd
-import numpy as np
 from datetime import datetime
 from pathlib import Path
 import logging
-from typing import Dict, List, Optional, Union
+from typing import Dict, Optional, Union
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +62,8 @@ class ExcelReportWriter:
             header_format = workbook.add_format({
                 'bold': True,
                 'text_wrap': True,
-                'valign': 'top',
+                'valign': 'vcenter',  # 垂直居中
+                'align': 'center',    # 水平居中
                 'fg_color': '#D7E4BD',  # 浅绿色背景
                 'border': 1
             })
@@ -72,62 +72,65 @@ class ExcelReportWriter:
             percentage_format = workbook.add_format({'num_format': '0.00%'})
             currency_format = workbook.add_format({'num_format': '¥#,##0.00'})
 
-            # 设置列宽
-            column_widths = {
-                '客户名称': 20,
-                '业务员': 12,
-                '订单数量': 10,
-                '本月总日活': 12,
-                '上月总日活': 12,
-                '总日活环比': 12,
-                '本月新鲜蔬菜销售额': 15,
-                '上月新鲜蔬菜销售额': 15,
-                '蔬菜销售额环比': 15,
-                '本月鲜肉类销售额': 15,
-                '上月鲜肉类销售额': 15,
-                '鲜肉销售额环比': 15,
-                '本月豆制品销售额': 15,
-                '上月豆制品销售额': 15,
-                '豆制品销售额环比': 15,
-                '本月生鲜销售额': 15,
-                '上月生鲜销售额': 15,
-                '生鲜销售额环比': 15
-            }
+            # 负值条件格式：浅红填充深红色文本
+            negative_format = workbook.add_format({
+                'font_color': '#9C0006',  # 深红色文本
+                'bg_color': '#FFC7CE',   # 浅红色填充
+                'num_format': '#,##0.00'
+            })
 
-            # 应用列宽
+            negative_percentage_format = workbook.add_format({
+                'font_color': '#9C0006',  # 深红色文本
+                'bg_color': '#FFC7CE',   # 浅红色填充
+                'num_format': '0.00%'
+            })
+
+            # 设置列宽：第一列25字符，其他列12字符
             for col_num, column in enumerate(df.columns):
-                width = column_widths.get(column, 12)  # 默认宽度12
+                if col_num == 0:  # 第一列
+                    width = 25
+                else:  # 其他列
+                    width = 12
                 worksheet.set_column(col_num, col_num, width)
 
-            # 格式化标题行
+            # 格式化标题行（现在在第1行，因为第0行是合并表头）
             for col_num, value in enumerate(df.columns.values):
-                worksheet.write(0, col_num, value, header_format)
+                worksheet.write(1, col_num, value, header_format)
 
-            # 格式化数据行
-            for row_num in range(1, len(df) + 1):
+            # 格式化数据行（从第2行开始）
+            for row_num in range(2, len(df) + 2):
                 for col_num, column in enumerate(df.columns):
-                    value = df.iloc[row_num - 1, col_num]
+                    value = df.iloc[row_num - 2, col_num]
 
                     # 跳过客户名称和业务员列
                     if column in ['客户名称', '业务员']:
                         worksheet.write(row_num, col_num, value)
-                    # 环比列使用百分比格式
+                    # 环比列使用百分比格式，负值使用特殊格式
                     elif '环比' in column:
-                        worksheet.write(row_num, col_num, value / 100 if pd.notna(value) else 0, percentage_format)
-                    # 销售额列使用货币格式
+                        if pd.notna(value) and isinstance(value, (int, float)) and value < 0:
+                            worksheet.write(row_num, col_num, value / 100, negative_percentage_format)
+                        else:
+                            worksheet.write(row_num, col_num, value / 100 if pd.notna(value) and isinstance(value, (int, float)) else 0, percentage_format)
+                    # 销售额列使用货币格式，负值使用特殊格式
                     elif '销售额' in column:
-                        worksheet.write(row_num, col_num, value, currency_format)
-                    # 其他数值列使用数字格式
+                        if pd.notna(value) and isinstance(value, (int, float)) and value < 0:
+                            worksheet.write(row_num, col_num, value, negative_format)
+                        else:
+                            worksheet.write(row_num, col_num, value, currency_format)
+                    # 其他数值列使用数字格式，负值使用特殊格式
                     elif isinstance(value, (int, float)):
-                        worksheet.write(row_num, col_num, value, number_format)
+                        if pd.notna(value) and value < 0:
+                            worksheet.write(row_num, col_num, value, negative_format)
+                        else:
+                            worksheet.write(row_num, col_num, value, number_format)
                     else:
                         worksheet.write(row_num, col_num, value)
 
-            # 冻结首行
-            worksheet.freeze_panes(1, 0)
+            # 冻结标题行（冻结第2行及以下）
+            worksheet.freeze_panes(2, 0)
 
-            # 添加筛选器
-            worksheet.autofilter(0, 0, len(df), len(df.columns) - 1)
+            # 添加筛选器（从第1行开始，到最后一行）
+            worksheet.autofilter(1, 0, len(df) + 1, len(df.columns) - 1)
 
             logger.info(f"工作表 {sheet_name} 格式化完成")
 
@@ -139,7 +142,7 @@ class ExcelReportWriter:
     def write_fresh_food_ratio_report(
         self,
         customer_diff_df: pd.DataFrame,
-        output_file: Optional[str] = None
+        output_file: Optional[Union[str, Path]] = None
     ) -> str:
         """
         写入生鲜环比报告
@@ -168,11 +171,15 @@ class ExcelReportWriter:
                 customer_diff_df.to_excel(
                     writer,
                     sheet_name='客户环比',
-                    index=False
+                    index=False,
+                    startrow=1  # 从第二行开始，为表头留空间
                 )
 
                 # 应用格式化
                 self.apply_excel_formatting(writer, '客户环比', customer_diff_df)
+
+                # 添加合并的表头
+                self._add_merged_header(writer, '客户环比', customer_diff_df)
 
                 # 添加数据摘要工作表
                 self._add_summary_sheet(writer, customer_diff_df)
@@ -183,6 +190,58 @@ class ExcelReportWriter:
         except Exception as e:
             logger.error(f"生成生鲜环比报告失败: {str(e)}")
             raise
+
+    def _add_merged_header(self, writer: pd.ExcelWriter, sheet_name: str, df: pd.DataFrame):
+        """
+        添加合并的表头
+
+        Args:
+            writer: Excel写入器
+            sheet_name: 工作表名称
+            df: 数据DataFrame
+        """
+        try:
+            workbook = writer.book
+            worksheet = writer.sheets[sheet_name]
+
+            # 获取数据中的最新日期
+            # 从原始数据中查找发货时间的最大值（最近日期）
+            latest_date = None
+            if hasattr(df, 'latest_date') and getattr(df, 'latest_date', None):
+                latest_date = getattr(df, 'latest_date')
+            else:
+                # 如果没有最新日期信息，使用当前日期
+                latest_date = datetime.now().day
+
+            # 创建表头文案
+            header_text = f'客户生鲜环比截止 {latest_date} 日'
+
+            # 定义表头格式
+            header_format = workbook.add_format({
+                'bold': True,
+                'font_size': 14,
+                'align': 'center',
+                'valign': 'vcenter',
+                'fg_color': '#4F81BD',  # 蓝色背景
+                'font_color': 'white',
+                'border': 1
+            })
+
+            # 合并单元格：从第一行开始，跨越所有列
+            total_columns = len(df.columns)
+            worksheet.merge_range(
+                0, 0, 0, total_columns - 1,  # 第一行，从第0列到最后一列
+                header_text,
+                header_format
+            )
+
+            # 设置行高
+            worksheet.set_row(0, 30)  # 设置第一行高度
+
+            logger.info(f"已添加合并表头: {header_text}")
+
+        except Exception as e:
+            logger.warning(f"添加合并表头失败: {str(e)}")
 
     def _add_summary_sheet(self, writer: pd.ExcelWriter, customer_diff_df: pd.DataFrame):
         """
@@ -242,7 +301,7 @@ class ExcelReportWriter:
     def write_multiple_sheets(
         self,
         data_dict: Dict[str, pd.DataFrame],
-        output_file: Optional[str] = None
+        output_file: Optional[Union[str, Path]] = None
     ) -> str:
         """
         写入多个工作表到Excel文件
@@ -287,7 +346,7 @@ class ExcelReportWriter:
 
 def generate_fresh_food_ratio_report(
     customer_diff_df: pd.DataFrame,
-    output_file: Optional[str] = None
+    output_file: Optional[Union[str, Path]] = None
 ) -> str:
     """
     生成生鲜环比报告的便捷函数

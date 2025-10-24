@@ -122,8 +122,11 @@ class TestFreshFoodRatioProcessor:
 
         assert isinstance(merged, pd.DataFrame)
         assert "月份" in merged.columns
-        assert len(merged) == len(last_df) + len(this_df)
+        # 数据经过筛选后，行数应该小于等于原始数据总和
+        assert len(merged) <= len(last_df) + len(this_df)
         assert set(merged["月份"].unique()) == {"上月", "本月"}
+        # 验证数据已按发货时间降序排序
+        assert merged['发货时间'].is_monotonic_decreasing
 
     def test_calculate_order_days(self, processor, test_data):
         """测试计算下单天数"""
@@ -157,7 +160,8 @@ class TestFreshFoodRatioProcessor:
         assert isinstance(pivot, pd.DataFrame)
         assert "客户名称" in pivot.columns
         assert "业务员" in pivot.columns
-        assert "订单数量" in pivot.columns
+        # 验证每个客户只有一行（唯一客户名称）
+        assert len(pivot) == len(pivot['客户名称'].unique())
         assert len(pivot) > 0
 
     def test_calculate_sales_data(self, processor, test_data):
@@ -203,11 +207,10 @@ class TestFreshFoodRatioProcessor:
         assert isinstance(result, pd.DataFrame)
         assert len(result) > 0
 
-        # 检查必要的列是否存在
+        # 检查必要的列是否存在（移除订单数量列）
         required_columns = [
             "客户名称",
             "业务员",
-            "订单数量",
             "本月总日活",
             "上月总日活",
             "总日活环比",
@@ -230,7 +233,8 @@ class TestFreshFoodRatioProcessor:
 
         # 验证数据类型和值的合理性
         assert result["生鲜销售额环比"].dtype == float
-        # 注意：由于透视表按客户名称和业务员分组，同一客户可能有多条记录
+        # 验证每个客户只有一行（唯一客户名称）
+        assert len(result) == len(result['客户名称'].unique())
         logger.info(f"结果数据行数: {len(result)}")
         logger.info(f"唯一客户数: {len(result['客户名称'].unique())}")
         logger.info(f"唯一业务员数: {len(result['业务员'].unique())}")
@@ -376,8 +380,8 @@ class TestExcelReportWriter:
                 assert "客户环比" in xls.sheet_names
                 assert "数据摘要" in xls.sheet_names
 
-                # 验证客户环比数据
-                customer_df = pd.read_excel(xls, sheet_name="客户环比")
+                # 验证客户环比数据（注意：由于增加了表头行，实际数据从第2行开始）
+                customer_df = pd.read_excel(xls, sheet_name="客户环比", header=1)  # 跳过表头行，从第1行开始读取列名
                 assert len(customer_df) == len(sample_data)
                 assert "客户名称" in customer_df.columns
 
