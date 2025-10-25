@@ -16,12 +16,12 @@ import pandas as pd
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from app.outputs.excel_writer import ExcelReportWriter
-from app.processors.excel_processor import FreshFoodRatioProcessor
 from app.processors.fresh_food_ratio import (
+    FreshFoodRatioProcessor,
     FreshFoodRatioService,
     process_fresh_food_ratio,
     函数,
+    ExcelReportWriter,
 )
 from app.utils.logger import get_logger
 
@@ -126,7 +126,7 @@ class TestFreshFoodRatioProcessor:
         assert len(merged) <= len(last_df) + len(this_df)
         assert set(merged["月份"].unique()) == {"上月", "本月"}
         # 验证数据已按发货时间降序排序
-        assert merged['发货时间'].is_monotonic_decreasing
+        assert merged["发货时间"].is_monotonic_decreasing
 
     def test_calculate_order_days(self, processor, test_data):
         """测试计算下单天数"""
@@ -161,7 +161,7 @@ class TestFreshFoodRatioProcessor:
         assert "客户名称" in pivot.columns
         assert "业务员" in pivot.columns
         # 验证每个客户只有一行（唯一客户名称）
-        assert len(pivot) == len(pivot['客户名称'].unique())
+        assert len(pivot) == len(pivot["客户名称"].unique())
         assert len(pivot) > 0
 
     def test_calculate_sales_data(self, processor, test_data):
@@ -234,7 +234,7 @@ class TestFreshFoodRatioProcessor:
         # 验证数据类型和值的合理性
         assert result["生鲜销售额环比"].dtype == float
         # 验证每个客户只有一行（唯一客户名称）
-        assert len(result) == len(result['客户名称'].unique())
+        assert len(result) == len(result["客户名称"].unique())
         logger.info(f"结果数据行数: {len(result)}")
         logger.info(f"唯一客户数: {len(result['客户名称'].unique())}")
         logger.info(f"唯一业务员数: {len(result['业务员'].unique())}")
@@ -381,7 +381,9 @@ class TestExcelReportWriter:
                 assert "数据摘要" in xls.sheet_names
 
                 # 验证客户环比数据（注意：由于增加了表头行，实际数据从第2行开始）
-                customer_df = pd.read_excel(xls, sheet_name="客户环比", header=1)  # 跳过表头行，从第1行开始读取列名
+                customer_df = pd.read_excel(
+                    xls, sheet_name="客户环比", header=1
+                )  # 跳过表头行，从第1行开始读取列名
                 assert len(customer_df) == len(sample_data)
                 assert "客户名称" in customer_df.columns
 

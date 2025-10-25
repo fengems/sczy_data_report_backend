@@ -102,7 +102,7 @@ class FreshFoodRatioProcessor(BaseExcelProcessor):
 
     def create_pivot_table_base(self, merged_data: pd.DataFrame) -> pd.DataFrame:
         """
-        创建基础透视表，按客户名称维度
+        创建基础透视表，按客户名称维度，只包含生鲜分类
 
         Args:
             merged_data: 合并后的数据
@@ -110,9 +110,12 @@ class FreshFoodRatioProcessor(BaseExcelProcessor):
         Returns:
             透视表数据
         """
-        # 按客户名称创建透视表
+        # 先过滤数据，只包含生鲜分类
+        fresh_data = merged_data[merged_data['一级分类'].isin(self.FRESH_CATEGORIES)]
+
+        # 按客户名称创建透视表，只包含生鲜分类
         pivot = pd.pivot_table(
-            merged_data,
+            fresh_data,
             values='实际金额',
             index='客户名称',
             columns='一级分类',
@@ -126,7 +129,7 @@ class FreshFoodRatioProcessor(BaseExcelProcessor):
             if category not in pivot.columns:
                 pivot[category] = 0
 
-        logger.info(f"透视表创建完成，客户数: {len(pivot)}")
+        logger.info(f"生鲜分类透视表创建完成，客户数: {len(pivot)}")
         return pivot
 
     def get_latest_salesman(self, merged_data: pd.DataFrame, customer_name: str) -> str:
@@ -223,6 +226,7 @@ class FreshFoodRatioProcessor(BaseExcelProcessor):
     def _reorder_columns(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         重新排列列的顺序，让环比列紧跟在对应数据列后面
+        只保留需要的列，移除多余的原始分类列
 
         Args:
             df: 原始DataFrame
@@ -240,13 +244,10 @@ class FreshFoodRatioProcessor(BaseExcelProcessor):
             '本月生鲜销售额', '上月生鲜销售额', '生鲜销售额环比'
         ]
 
-        # 筛选实际存在的列
-        existing_columns = [col for col in column_order if col in df.columns]
+        # 只保留实际存在且在期望列表中的列，不添加其他列
+        final_columns = [col for col in column_order if col in df.columns]
 
-        # 添加其他未在order中的列
-        other_columns = [col for col in df.columns if col not in existing_columns]
-
-        final_columns = existing_columns + other_columns
+        logger.info(f"列重排序完成，最终列数: {len(final_columns)}")
         return df[final_columns]
 
     def get_customer_diff(self, last_month_file: str, this_month_file: str) -> pd.DataFrame:
