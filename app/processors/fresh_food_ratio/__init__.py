@@ -5,7 +5,7 @@
 
 from .processor import FreshFoodRatioProcessor
 from .service import FreshFoodRatioService
-from .main import process_fresh_food_ratio, 函数
+from .main import process_fresh_food_ratio, 函数, process_region_ratio, process_customer_ratio_only
 
 # 为了向后兼容，从输出模块导入
 from app.outputs.fresh_food_ratio.writer import FreshFoodRatioExcelWriter
@@ -18,6 +18,8 @@ __all__ = [
     'FreshFoodRatioService',
     'process_fresh_food_ratio',
     '函数',
+    'process_region_ratio',
+    'process_customer_ratio_only',
     'FreshFoodRatioExcelWriter',
     'ExcelReportWriter'
 ]

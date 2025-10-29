@@ -26,6 +26,53 @@
 - 支持自定义文件名和自动文件名的时间戳添加
 - 兼容所有爬虫模块：商品档案爬虫、订单爬虫等
 
+## [1.2.0] - 2025-10-28 22:32:36
+
+### 新增
+- 🎯 **区域环比功能**: 在现有生鲜环比报告中新增区域维度的环比分析
+- 📊 **多维度透视**: 支持7个核心指标的区域维度分析
+- ⏰ **智能时间计算**: 实现周日-周六标准的周范围计算
+- 🔄 **双重对比分析**: 支持本周vs上周、本周vs上月的时间对比
+- 🛠️ **灵活输出配置**: 支持选择性生成客户环比、区域环比或两者
+
+### 新增核心指标
+- 总活客户数（按区域统计的非重复客户数）
+- 日活客户数（按区域、按日期统计的非重复客户数）
+- 蔬菜GMV（新鲜蔬菜分类销售额）
+- 鲜肉GMV（鲜肉类分类销售额）
+- 生鲜GMV（新鲜蔬菜+鲜肉类+豆制品销售额）
+- 标品GMV（非生鲜分类销售额）
+- 总GMV（全部分类销售额）
+
+### 技术实现
+- 扩展 `FreshFoodRatioProcessor` 新增区域数据透视方法
+- 实现 TypeScript 中的 `getPivotData`、`getTableByDate`、`getCompareData` 逻辑
+- 新增区域环比Sheet的Excel格式化和样式
+- 完善的错误处理和向后兼容性保证
+
+### API接口扩展
+```python
+# 组合功能（默认包含区域环比）
+process_fresh_food_ratio(last_month_file, this_month_file, include_region_ratio=True)
+
+# 仅区域环比
+process_region_ratio(last_month_file, this_month_file)
+
+# 服务类方式
+service.process_region_ratio_only(last_month_file, this_month_file)
+```
+
+### 输出结果
+- **客户环比Sheet**: 50个客户 × 17个数据字段
+- **区域环比Sheet**: 7个区域 × 36个数据字段（包含基数和环比数据）
+- **数据摘要Sheet**: 整合客户和区域的统计摘要
+
+### 质量保证
+- ✅ 完全向后兼容，现有客户环比功能不受影响
+- ✅ 错误容错：区域环比失败时仍能正常生成客户环比报告
+- ✅ 完善的测试验证：所有核心功能通过验证
+- ✅ 符合Linus Torvalds代码品味要求
+
 ## [Unreleased]
 
 ### 新增

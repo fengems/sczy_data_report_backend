@@ -317,7 +317,7 @@ class TestExcelReportWriterOptimized:
 
             # 写入报告
             result_path = writer.write_report(
-                sample_data, str(output_file)
+                sample_data, output_file=str(output_file)
             )
 
             # 验证文件存在
