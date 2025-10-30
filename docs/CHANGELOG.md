@@ -5,6 +5,51 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 并且本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.3.0] - 2025-10-30
+
+### 新增
+- **日报数据处理模块**: 实现完整的日报Excel报告生成功能
+  - 支持5种报表类型：品类数据、业务数据、业务蔬菜数据、线路数据、线路品类数据
+  - 支持多期对比：当期、对比期、额外对比期
+  - 自动计算日活、金额、差值、环比
+  - 专业Excel格式化：千分号、百分比、条件格式化
+  - 智能文件命名：自动时间戳避免覆盖
+
+### 修复
+- **日活数值显示**: 修复范围日活显示为整数的问题，现在正确显示为小数
+- **环比计算错误**: 修复除零错误导致显示'inf'的问题，分母为0时显示为空
+- **条件格式化范围**: 修复条件格式化未覆盖最后一行数据的问题
+- **百分比格式**: 修复环比计算错误乘以100的问题，Excel百分比格式自动处理显示
+
+### 改进
+- **测试覆盖**: 创建综合测试文件 `tests/test_daily_report.py`
+- **代码质量**: 优化异常处理和边界条件检查
+- **文档完善**: 添加详细的API文档和使用示例
+
+### 新增核心文件
+- `app/processors/daily_report/processor.py`: 核心数据处理器
+- `app/processors/daily_report/service.py`: 业务服务层
+- `app/processors/daily_report/entry.py`: 对外接口入口
+- `app/outputs/daily_report/writer.py`: Excel格式化写入器
+- `examples/daily_report_example.py`: 完整使用示例脚本
+- `docs/DAILY_REPORT_MODULE.md`: 详细的模块文档
+
+### 技术实现
+- **DailyReportProcessor**: 继承BaseExcelProcessor，实现数据透视、对比分析、数据合并
+- **DailyReportWriter**: 继承BaseExcelWriter，实现条件格式化、合并单元格、专业样式
+- **DailyReportService**: 业务逻辑协调，提供高级接口和异常处理
+- **CompareOptions**: 使用dataclass定义灵活的对比选项配置
+- **条件格式化**: 负数自动显示为浅红填充深红色文本
+- **智能日期范围**: 自动识别单日或多日数据，生成相应的标题描述
+
+### API接口
+- `generate_daily_report()`: 生成包含所有sheet的完整报告
+- `generate_category_report()`: 生成品类数据报告
+- `generate_sales_report()`: 生成业务数据报告
+- `generate_vegetable_report()`: 生成业务蔬菜数据报告
+- `generate_route_report()`: 生成线路数据报告
+- `generate_route_category_report()`: 生成线路品类报告
+
 ## [1.1.0] - 2025-10-19
 
 ### 新增
